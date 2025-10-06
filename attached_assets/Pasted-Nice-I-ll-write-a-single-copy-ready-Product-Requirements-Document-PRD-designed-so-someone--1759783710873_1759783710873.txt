@@ -1,0 +1,429 @@
+Nice — I’ll write a single, copy-ready **Product Requirements Document (PRD)** designed so someone (or Replit’s AI + a dev) can pick it up and implement the MVP in a Replit workspace with minimal back-and-forth. It contains exactly what to run, how to configure the Replit environment, the DB schema, endpoints, acceptance criteria, milestones, and QA checks. You can paste this into your Replit project README, hand it to a contractor, or give it to Replit’s AutoDev tools.
+
+---
+
+# Family Command Center — MVP PRD (Replit-ready)
+
+## 1 — Project summary (one liner)
+
+A glanceable, sync-first **Family Command Center** that unifies Google Calendars, ingests school messages, and provides realtime shared lists & chores for families (school-age kids 5–12). Built as a Next.js app deployed on Replit with Supabase backend.
+
+---
+
+## 2 — Key objectives (MVP)
+
+1. Import parent Google Calendar events (one-way → app) and display a visual family calendar.
+2. Real-time shared grocery lists and chores with assignment and completion.
+3. School Hub: ingest forwarded school emails into a single family message feed.
+4. Simple family onboarding & tenant isolation (families scoped by `family_id`).
+5. Stripe test billing for Premium unlock.
+
+Success metric for MVP: pilot families report reduced coordination friction and at least 50% of pilot users perform Calendar connect + add a list item within first session.
+
+---
+
+## 3 — Non-goals (MVP scope limits)
+
+* No full two-way calendar sync back to Google (app → Google) in MVP (optional later).
+* No child-facing logins under 13 (avoid COPPA complexity).
+* Limited integrations beyond Google Calendar and inbound email (ClassDojo/Remind later).
+
+---
+
+## 4 — Target users
+
+* Parents (moms & dads) of school-age children (5–12), primarily U.S. but globally applicable.
+* Early adopters: PTA members, parents active in school groups, time-starved dual-income families.
+
+---
+
+## 5 — Core user stories (MUST have)
+
+1. **Calendar import**
+
+   * As a parent, I can connect my Google Calendar so my family’s events appear in the app.
+   * Acceptance: OAuth flow completes, `calendar_connections` row created, next 30 days of events appear in `events` table.
+
+2. **Visual family dashboard**
+
+   * As a parent, I can open a dashboard and instantly see today’s events colored by family member.
+   * Acceptance: Dashboard shows member color, owner, and next 3 events.
+
+3. **Shared grocery list**
+
+   * As a parent, I can add an item to a grocery list and my partner sees it in realtime.
+   * Acceptance: Item added by Parent A appears in Parent B’s UI <1s.
+
+4. **Chore assignment & completion**
+
+   * As a parent, I can assign chores to a family member and view completion history.
+   * Acceptance: Repeating chore can be assigned; completion logs to `chore_completions`.
+
+5. **School Hub ingest**
+
+   * As a parent, I can forward school emails to a unique family email and see messages in the School Hub feed.
+   * Acceptance: Inbound webhook stores message record in `messages`.
+
+6. **Billing (test)**
+
+   * As a parent, I can start a checkout session to subscribe (Stripe test), and subscription updates user billing status in DB.
+   * Acceptance: Stripe Checkout session created and webhook updates DB.
+
+---
+
+## 6 — Functional requirements (brief)
+
+* **Auth**: Supabase Auth (email/password + optional social).
+* **DB**: Supabase Postgres; Row Level Security by `family_id`.
+* **Realtime**: Supabase Realtime or Channels for lists & chores.
+* **Calendar**: Google OAuth for `https://www.googleapis.com/auth/calendar` (store refresh token server-side).
+* **Email ingest**: Mailgun/Postmark inbound forwarding to `/api/mail/inbound`.
+* **Payments**: Stripe checkout & webhook.
+* **UI**: Next.js App Router + React, Tailwind CSS.
+
+---
+
+## 7 — Data model (core tables — run SQL script below in Supabase SQL Editor)
+
+*(Copy/paste into Supabase SQL Editor)*
+
+```sql
+-- families
+create table families (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_at timestamptz default now()
+);
+
+-- users: map to supabase auth user id
+create table users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text,
+  email text,
+  avatar_url text,
+  family_id uuid references families(id) on delete cascade,
+  role text default 'parent',
+  created_at timestamptz default now()
+);
+
+-- family_members (children + adults as personas)
+create table family_members (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id) on delete cascade,
+  name text not null,
+  role text,
+  birth_year int,
+  avatar_url text,
+  created_at timestamptz default now()
+);
+
+-- calendar connections
+create table calendar_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  google_account_email text,
+  access_token text,
+  refresh_token text,
+  token_scope text,
+  calendar_id text default 'primary',
+  created_at timestamptz default now(),
+  last_synced_at timestamptz
+);
+
+-- events (local copy)
+create table events (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id) on delete cascade,
+  external_id text,
+  calendar_id text,
+  title text,
+  description text,
+  start_at timestamptz,
+  end_at timestamptz,
+  owner_member_id uuid references family_members(id),
+  created_by uuid references users(id),
+  created_at timestamptz default now(),
+  updated_at timestamptz
+);
+
+-- chores & completions
+create table chores (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id) on delete cascade,
+  title text not null,
+  description text,
+  assignee_member_id uuid references family_members(id),
+  recurrence jsonb,
+  active boolean default true,
+  points int default 0,
+  created_by uuid references users(id),
+  created_at timestamptz default now()
+);
+
+create table chore_completions (
+  id uuid primary key default gen_random_uuid(),
+  chore_id uuid references chores(id) on delete cascade,
+  completed_by uuid references users(id),
+  member_id uuid references family_members(id),
+  completed_at timestamptz default now()
+);
+
+-- lists & items
+create table lists (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id) on delete cascade,
+  name text not null,
+  created_by uuid references users(id),
+  created_at timestamptz default now()
+);
+
+create table list_items (
+  id uuid primary key default gen_random_uuid(),
+  list_id uuid references lists(id) on delete cascade,
+  title text not null,
+  note text,
+  aisle text,
+  qty text,
+  assigned_to uuid references users(id),
+  purchased boolean default false,
+  purchased_by uuid references users(id),
+  purchased_at timestamptz,
+  created_at timestamptz default now()
+);
+
+-- ingested messages
+create table messages (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id) on delete cascade,
+  source text,
+  subject text,
+  body text,
+  raw_json jsonb,
+  received_at timestamptz default now(),
+  imported boolean default false
+);
+
+create index on events(family_id, start_at);
+```
+
+---
+
+## 8 — RLS policies (tenant isolation)
+
+Enable RLS and add baseline policies so authenticated users only access their family rows (run in SQL editor and adapt per table):
+
+```sql
+alter table events enable row level security;
+create policy "select events for family" on events
+  for select using (family_id = (select family_id from users where id = auth.uid()));
+create policy "insert events for family" on events
+  for insert with check (family_id = (select family_id from users where id = auth.uid()));
+-- Repeat for chores, lists, list_items, messages
+```
+
+---
+
+## 9 — API endpoints (minimal set to implement)
+
+Place these under `/pages/api/*` (Next.js):
+
+* `GET /api/health` — health check.
+* `GET /api/families/:id` — family info (auth + RLS via supabase).
+* `POST /api/auth/google` — redirect to Google OAuth (server).
+* `GET  /api/auth/google/callback` — receive OAuth code, exchange tokens, store `calendar_connections`.
+* `POST /api/calendar/sync` — trigger calendar sync (used by scheduled worker or manual).
+* `POST /api/mail/inbound` — inbound mail webhook to ingest school messages.
+* `POST /api/stripe/create-checkout-session` — create Stripe Checkout session.
+* `POST /api/stripe/webhook` — Stripe webhook handler (update billing status).
+* `GET /api/events?family_id=` — list events (client uses Supabase direct queries where possible).
+* `POST /api/events` — optional server side event creation (if writing to Google later).
+
+**Auth note:** Prefer Supabase client queries from frontend for simple CRUD (use RLS). Use API endpoints only for server-side work: OAuth callback, webhooks, and actions requiring `SUPABASE_SERVICE_ROLE_KEY`.
+
+---
+
+## 10 — Supabase edge function for Calendar Sync
+
+* Implement as scheduled function in Supabase (every 10–15 min). Steps:
+
+  1. Select `calendar_connections` rows.
+  2. Use saved refresh_token to get access_token (googleapis).
+  3. Pull next 30 days events, upsert into `events` table (use `external_id`).
+  4. Update `last_synced_at`.
+
+(If Edge Functions aren’t used, a serverless cron on Replit can call `/api/calendar/sync` but Supabase scheduling is preferred.)
+
+---
+
+## 11 — UI / UX: key screens & components
+
+1. **Landing / Signup** — simple pitch + Signup (Supabase Auth).
+2. **Onboarding / Invite** — create family, invite partner (send invite link).
+3. **Dashboard (Command Center)** — Today card, week timeline, chores summary, grocery quick add.
+4. **CalendarView** — week & month view; events colored by member.
+5. **ListsView** — grocery lists with real-time updates and assign toggle.
+6. **ChoresView** — list of chores, assignee avatars, mark complete, completion history.
+7. **School Hub** — message feed with filters (Urgent / Teacher / Class).
+8. **Settings** — connect Google Calendar, manage family members, billing.
+
+Wireframe notes: prioritize clarity and large targets. Tablet/kiosk layout is a simple rearrangement with big Today card and week timeline.
+
+---
+
+## 12 — Environment variables (Replit Secrets)
+
+Add exactly these keys to Replit Secrets (names required by code):
+
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+APP_BASE_URL               # e.g. https://<username>.<repl>.repl.co
+MAIL_INBOUND_SECRET
+STRIPE_SECRET_KEY
+NEXT_PUBLIC_STRIPE_PUBLISHABLE
+STRIPE_WEBHOOK_SECRET
+SUPABASE_EDGE_FUNCTION_SECRET (optional)
+```
+
+---
+
+## 13 — Replit setup & bootstrap (copy/paste commands)
+
+Put this `setup.sh` in project root and run it once in Replit shell (edits to match your needs):
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+echo "Installing deps..."
+npm install next react react-dom @supabase/supabase-js googleapis stripe react-hook-form tailwindcss postcss autoprefixer @heroicons/react axios nanoid dayjs
+
+echo "Initializing Tailwind..."
+npx tailwindcss init -p
+
+echo "Create .env.local from template .env.example (fill values manually)"
+cat > .env.example <<'EOF'
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+APP_BASE_URL=
+MAIL_INBOUND_SECRET=
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE=
+STRIPE_WEBHOOK_SECRET=
+EOF
+
+echo "Done. Please set Replit Secrets from the .env.example variables, then run 'npm run dev'"
+```
+
+**Run:** `bash setup.sh` then set Replit Secrets via the Secrets UI.
+
+---
+
+## 14 — Git workflow & CI for Replit (recommended)
+
+* `main` — production-ready code
+* `develop` — daily development
+* Feature branches: `feature/<short-desc>`
+* PR template (short):
+
+  * Title, Summary, Related issue, How to test, Screenshots
+* Basic test: `npm run lint` (add ESLint), `npm run test` (jest for unit tests if time permits)
+* Deploy: Replit auto-deploy from `main` branch.
+
+---
+
+## 15 — Acceptance tests (QA checklist)
+
+Perform these with a test family (two parent accounts):
+
+1. **Onboarding**
+
+   * Create family and invite second parent → both users share `family_id` in `users` table.
+
+2. **Calendar connect**
+
+   * Parent connects Google Calendar via `/api/auth/google` → `calendar_connections` row with refresh_token exists.
+   * Run calendar sync → `events` table contains events for next 30 days.
+
+3. **Realtime list**
+
+   * Parent A adds `milk` → Parent B sees it within 1s.
+   * Assign item to Parent B → assignment property set correctly.
+
+4. **Chore flow**
+
+   * Create recurring chore Mon-Fri assigned to child → appears today when applicable.
+   * Mark complete → `chore_completions` logged with user id.
+
+5. **School hub**
+
+   * Forward test email to Mailgun configured endpoint → `messages` table contains parsed message.
+
+6. **Billing**
+
+   * Create Stripe Checkout session → checkout redirects; on webhook `users` billing status updated.
+
+7. **RLS**
+
+   * Authenticated user from family A cannot see family B’s events/lists (test with two families).
+
+---
+
+## 16 — Milestones & timeline (suggested, flexible)
+
+* **Milestone 0 (1–2 days)**: Project scaffold, Supabase project, run SQL schema, set env secrets.
+* **Milestone 1 (3–7 days)**: Auth & family onboarding; basic dashboard; realtime lists & chores.
+* **Milestone 2 (3–5 days)**: Google OAuth start + calendar sync Edge function (one-way). Dashboard calendar display.
+* **Milestone 3 (2–4 days)**: Email ingest endpoint + School Hub UI.
+* **Milestone 4 (2–4 days)**: Stripe checkout & webhook, billing gating (premium feature toggle).
+* **Milestone 5 (2–5 days)**: QA, RLS hardening, privacy checks, pilot rollout.
+
+Total MVP: ~2–4 weeks for a small team (1 dev + 1 designer) or 4–8 weeks for solo dev depending on availability.
+
+---
+
+## 17 — Security & privacy checklist (must-do before pilots)
+
+* Use HTTPS (Replit provides).
+* Store `SUPABASE_SERVICE_ROLE_KEY` & refresh tokens only in Replit Secrets; encrypt refresh tokens if possible.
+* Implement OAuth `state` param to bind Google connect to authenticated user.
+* Do **not** create child accounts under 13; store no sensitive child PII.
+* Provide a clear Privacy Policy and Data Deletion option.
+* Limit log retention for PII-containing logs.
+
+---
+
+## 18 — Risks & mitigations
+
+* **Risk:** Google refresh tokens may not be returned on subsequent consents.
+  **Mitigation:** Request `access_type=offline` & `prompt=consent`. Store tokens securely.
+* **Risk:** Email parsing reliability.
+  **Mitigation:** Start with simple forwarding + raw message storage; build parsing rules iteratively.
+* **Risk:** Supabase RLS misconfiguration exposing data.
+  **Mitigation:** Test extensively with two families; include RLS unit tests.
+
+---
+
+## 19 — Deliverables Replit/AI can produce from this PRD
+
+* Project scaffold (Next.js + Tailwind + supabase client files).
+* SQL schema script (provided above).
+* Minimal UI pages (Landing, Dashboard, Settings).
+* API endpoints stubs (auth oauth, mail inbound, stripe).
+* Edge Function skeleton for calendar sync.
+* Setup script (`setup.sh`) and `.env.example`.
+
+If you want, I can now:
+
+* generate **all scaffold files** (full project skeleton) in one message for copy/paste into Replit, or
+* generate a **single-file "Task Runner" script** (bash + node) that attempts to run the above setup automatically inside Replit.
+
+Tell me which of those you want and I’ll output the files/scripts immediately.
