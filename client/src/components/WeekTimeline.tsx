@@ -18,7 +18,6 @@ interface WeekDay {
 export default function WeekTimeline() {
   const [currentWeek, setCurrentWeek] = useState(0);
   
-  // Mock week data
   const weekDays: WeekDay[] = [
     { date: 4, dayName: 'Mon', isToday: false, events: [{ id: '1', color: 'hsl(270, 65%, 60%)' }] },
     { date: 5, dayName: 'Tue', isToday: false, events: [{ id: '2', color: 'hsl(30, 75%, 55%)' }, { id: '3', color: 'hsl(150, 60%, 50%)' }] },
@@ -30,14 +29,14 @@ export default function WeekTimeline() {
   ];
 
   return (
-    <Card data-testid="card-week-timeline">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
-        <CardTitle className="text-lg font-semibold">This Week</CardTitle>
+    <Card data-testid="card-week-timeline" className="shadow-sm border-0">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+        <CardTitle className="text-xl font-bold">This Week</CardTitle>
         <div className="flex gap-1">
           <Button 
             size="icon" 
             variant="ghost" 
-            className="h-7 w-7"
+            className="h-8 w-8"
             onClick={() => setCurrentWeek(prev => prev - 1)}
             data-testid="button-previous-week"
           >
@@ -46,7 +45,7 @@ export default function WeekTimeline() {
           <Button 
             size="icon" 
             variant="ghost" 
-            className="h-7 w-7"
+            className="h-8 w-8"
             onClick={() => setCurrentWeek(prev => prev + 1)}
             data-testid="button-next-week"
           >
@@ -59,21 +58,29 @@ export default function WeekTimeline() {
           {weekDays.map((day, index) => (
             <div 
               key={index} 
-              className={`text-center p-2 rounded-md ${day.isToday ? 'bg-primary text-primary-foreground' : 'hover-elevate'}`}
+              className={`text-center p-3 rounded-lg transition-all duration-200 ${
+                day.isToday 
+                  ? 'bg-primary text-primary-foreground shadow-md' 
+                  : 'bg-muted/30 hover-elevate'
+              }`}
               data-testid={`day-${day.dayName.toLowerCase()}`}
             >
-              <p className={`text-xs font-medium ${day.isToday ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide ${
+                day.isToday ? 'text-primary-foreground' : 'text-muted-foreground'
+              }`}>
                 {day.dayName}
               </p>
-              <p className={`text-lg font-semibold mt-1 ${day.isToday ? 'text-primary-foreground' : ''}`}>
+              <p className={`text-xl font-bold mt-1.5 ${
+                day.isToday ? 'text-primary-foreground' : 'text-foreground'
+              }`}>
                 {day.date}
               </p>
-              <div className="flex justify-center gap-1 mt-2 min-h-[8px]">
+              <div className="flex justify-center gap-1 mt-2.5 min-h-[8px]">
                 {day.events.slice(0, 3).map((event) => (
                   <div 
                     key={event.id} 
                     className="w-1.5 h-1.5 rounded-full" 
-                    style={{ backgroundColor: event.color }}
+                    style={{ backgroundColor: day.isToday ? 'rgba(255,255,255,0.8)' : event.color }}
                   />
                 ))}
               </div>

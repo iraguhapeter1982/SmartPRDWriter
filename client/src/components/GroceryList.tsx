@@ -28,7 +28,6 @@ export default function GroceryList({ items: initialItems = [] }: GroceryListPro
     setItems(prev => prev.map(item => 
       item.id === id ? { ...item, purchased: !item.purchased } : item
     ));
-    console.log('Item toggled:', id);
   };
 
   const handleAdd = () => {
@@ -40,51 +39,22 @@ export default function GroceryList({ items: initialItems = [] }: GroceryListPro
       };
       setItems(prev => [...prev, item]);
       setNewItem('');
-      console.log('Item added:', newItem);
     }
   };
 
+  const activeItems = items.filter(item => !item.purchased);
+  const completedItems = items.filter(item => item.purchased);
+
   return (
-    <Card data-testid="card-grocery-list">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
-        <CardTitle className="text-lg font-semibold">Grocery List</CardTitle>
-        <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+    <Card data-testid="card-grocery-list" className="shadow-sm border-0">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+        <CardTitle className="text-xl font-bold">Shopping List</CardTitle>
+        <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/30 p-2">
+          <ShoppingCart className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">No items in your list</p>
-        ) : (
-          <div className="space-y-2">
-            {items.map((item) => (
-              <div 
-                key={item.id} 
-                className="flex items-center gap-3 p-2 rounded-md hover-elevate"
-                data-testid={`list-item-${item.id}`}
-              >
-                <Checkbox 
-                  checked={item.purchased}
-                  onCheckedChange={() => handleToggle(item.id)}
-                  data-testid={`checkbox-item-${item.id}`}
-                />
-                <span 
-                  className={`flex-1 text-sm ${item.purchased ? 'line-through text-muted-foreground' : ''}`}
-                  data-testid={`text-item-title-${item.id}`}
-                >
-                  {item.title}
-                </span>
-                {item.assignedTo && (
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback style={{ backgroundColor: item.assignedTo.color }} className="text-white text-xs">
-                      {item.assignedTo.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        
-        <div className="flex gap-2 pt-2">
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
           <Input 
             placeholder="Add item..." 
             value={newItem}
@@ -101,6 +71,72 @@ export default function GroceryList({ items: initialItems = [] }: GroceryListPro
             <Plus className="h-4 w-4" />
           </Button>
         </div>
+
+        {items.length === 0 ? (
+          <div className="text-center py-6">
+            <div className="w-14 h-14 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
+              <ShoppingCart className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">No items in your list</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {activeItems.length > 0 && (
+              <div className="space-y-1.5">
+                {activeItems.map((item) => (
+                  <div 
+                    key={item.id} 
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover-elevate transition-all duration-200"
+                    data-testid={`list-item-${item.id}`}
+                  >
+                    <Checkbox 
+                      checked={item.purchased}
+                      onCheckedChange={() => handleToggle(item.id)}
+                      data-testid={`checkbox-item-${item.id}`}
+                    />
+                    <span 
+                      className="flex-1 text-sm font-medium"
+                      data-testid={`text-item-title-${item.id}`}
+                    >
+                      {item.title}
+                    </span>
+                    {item.assignedTo && (
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback style={{ backgroundColor: item.assignedTo.color }} className="text-white text-xs font-medium">
+                          {item.assignedTo.initials}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {completedItems.length > 0 && (
+              <div className="pt-2 border-t space-y-1.5">
+                {completedItems.map((item) => (
+                  <div 
+                    key={item.id} 
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover-elevate opacity-60 transition-all duration-200"
+                    data-testid={`list-item-${item.id}`}
+                  >
+                    <Checkbox 
+                      checked={item.purchased}
+                      onCheckedChange={() => handleToggle(item.id)}
+                      data-testid={`checkbox-item-${item.id}`}
+                    />
+                    <span 
+                      className="flex-1 text-sm line-through text-muted-foreground"
+                      data-testid={`text-item-title-${item.id}`}
+                    >
+                      {item.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
