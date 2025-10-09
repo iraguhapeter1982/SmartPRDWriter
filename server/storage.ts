@@ -1,4 +1,4 @@
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, gte, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { neonConfig, Pool } from "@neondatabase/serverless";
 import ws from "ws";
@@ -24,6 +24,8 @@ import type {
   InsertMessage,
   CalendarConnection,
   InsertCalendarConnection,
+  Subscription,
+  InsertSubscription,
 } from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -36,17 +38,17 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export interface IStorage {
-  // User operations
+  // User operations (Supabase Auth based - id comes from auth.users)
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUserStripeInfo(id: string, customerId: string, subscriptionId: string): Promise<User>;
+  createUser(user: InsertUser): Promise<User>; // user.id MUST be from Supabase Auth
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   
   // Family operations
   createFamily(family: InsertFamily): Promise<Family>;
   getFamily(id: string): Promise<Family | undefined>;
   getFamilyByInviteCode(code: string): Promise<Family | undefined>;
+  updateFamily(id: string, family: Partial<InsertFamily>): Promise<Family>;
   
   // Family member operations
   getFamilyMembers(familyId: string): Promise<FamilyMember[]>;
@@ -58,6 +60,7 @@ export interface IStorage {
   createCalendarConnection(connection: InsertCalendarConnection): Promise<CalendarConnection>;
   getCalendarConnections(userId: string): Promise<CalendarConnection[]>;
   updateCalendarConnection(id: string, connection: Partial<InsertCalendarConnection>): Promise<CalendarConnection>;
+  deleteCalendarConnection(id: string): Promise<void>;
   
   // Event operations
   getEventsByFamily(familyId: string, startDate?: Date, endDate?: Date): Promise<Event[]>;
@@ -85,6 +88,12 @@ export interface IStorage {
   getMessagesByFamily(familyId: string): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageAsRead(id: string): Promise<Message>;
+  
+  // Subscription operations (family-level)
+  getSubscriptionByFamily(familyId: string): Promise<Subscription | undefined>;
+  getSubscriptionByUser(userId: string): Promise<Subscription | undefined>;
+  createSubscription(subscription: InsertSubscription): Promise<Subscription>;
+  updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription>;
 }
 
 export class DbStorage implements IStorage {
@@ -94,29 +103,24 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(schema.users).where(eq(schema.users.username, username)).limit(1);
-    return result[0];
-  }
-
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
     return result[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
+    // insertUser.id MUST be provided and come from Supabase Auth
+    if (!insertUser.id) {
+      throw new Error("User ID is required and must come from Supabase Auth");
+    }
     const result = await db.insert(schema.users).values(insertUser).returning();
     return result[0];
   }
 
-  async updateUserStripeInfo(id: string, customerId: string, subscriptionId: string): Promise<User> {
+  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
     const result = await db
       .update(schema.users)
-      .set({ 
-        stripeCustomerId: customerId, 
-        stripeSubscriptionId: subscriptionId,
-        subscriptionStatus: 'active'
-      })
+      .set(user)
       .where(eq(schema.users.id, id))
       .returning();
     return result[0];
@@ -135,6 +139,15 @@ export class DbStorage implements IStorage {
 
   async getFamilyByInviteCode(code: string): Promise<Family | undefined> {
     const result = await db.select().from(schema.families).where(eq(schema.families.inviteCode, code)).limit(1);
+    return result[0];
+  }
+
+  async updateFamily(id: string, family: Partial<InsertFamily>): Promise<Family> {
+    const result = await db
+      .update(schema.families)
+      .set(family)
+      .where(eq(schema.families.id, id))
+      .returning();
     return result[0];
   }
 
@@ -180,11 +193,35 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  // Event operations
+  async deleteCalendarConnection(id: string): Promise<void> {
+    await db.delete(schema.calendarConnections).where(eq(schema.calendarConnections.id, id));
+  }
+
+  // Event operations with proper overlap filtering
   async getEventsByFamily(familyId: string, startDate?: Date, endDate?: Date): Promise<Event[]> {
-    let query = db.select().from(schema.events).where(eq(schema.events.familyId, familyId));
+    const conditions = [eq(schema.events.familyId, familyId)];
     
-    return await query.orderBy(asc(schema.events.startTime));
+    if (startDate && endDate) {
+      // Get events that overlap with the date range
+      // An event overlaps if: event.startTime <= endDate AND (event.endTime >= startDate OR endTime is null)
+      // For NULL endTime (ongoing/all-day events), include if startTime <= endDate (still active in window)
+      conditions.push(lte(schema.events.startTime, endDate));
+      conditions.push(
+        sql`(${schema.events.endTime} >= ${startDate}::timestamptz OR ${schema.events.endTime} IS NULL)`
+      );
+    } else if (startDate) {
+      // Only start date provided - get events on or after this date
+      conditions.push(gte(schema.events.startTime, startDate));
+    } else if (endDate) {
+      // Only end date provided - get events on or before this date
+      conditions.push(lte(schema.events.startTime, endDate));
+    }
+    
+    return await db
+      .select()
+      .from(schema.events)
+      .where(and(...conditions))
+      .orderBy(asc(schema.events.startTime));
   }
 
   async createEvent(event: InsertEvent): Promise<Event> {
@@ -284,6 +321,41 @@ export class DbStorage implements IStorage {
       .update(schema.messages)
       .set({ isRead: true })
       .where(eq(schema.messages.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Subscription operations (family-level)
+  async getSubscriptionByFamily(familyId: string): Promise<Subscription | undefined> {
+    const result = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.familyId, familyId))
+      .orderBy(desc(schema.subscriptions.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getSubscriptionByUser(userId: string): Promise<Subscription | undefined> {
+    const result = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.userId, userId))
+      .orderBy(desc(schema.subscriptions.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
+    const result = await db.insert(schema.subscriptions).values(subscription).returning();
+    return result[0];
+  }
+
+  async updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription> {
+    const result = await db
+      .update(schema.subscriptions)
+      .set({ ...subscription, updatedAt: new Date() })
+      .where(eq(schema.subscriptions.id, id))
       .returning();
     return result[0];
   }
