@@ -312,6 +312,11 @@ export class DbStorage implements IStorage {
     return await db.select().from(schema.chores).where(eq(schema.chores.familyId, familyId));
   }
 
+  async getChore(id: string): Promise<Chore | undefined> {
+    const result = await db.select().from(schema.chores).where(eq(schema.chores.id, id)).limit(1);
+    return result[0];
+  }
+
   async createChore(chore: InsertChore): Promise<Chore> {
     const result = await db.insert(schema.chores).values(chore).returning();
     return result[0];

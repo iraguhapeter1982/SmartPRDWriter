@@ -492,6 +492,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Chore routes
+
+  // Get all chores for family
+  app.get("/api/chores", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const chores = await storage.getChoresByFamily(user.familyId);
+      res.json(chores);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create chore
+  app.post("/api/chores", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const validated = schema.insertChoreSchema.parse(req.body);
+      const chore = await storage.createChore({
+        ...validated,
+        familyId: user.familyId,
+      });
+
+      res.json(chore);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update chore
+  app.patch("/api/chores/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const chore = await storage.getChore(id);
+      if (!chore || chore.familyId !== user.familyId) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      const validated = schema.insertChoreSchema.partial().parse(req.body);
+      const { familyId: _, ...safeUpdate } = validated;
+
+      const updatedChore = await storage.updateChore(id, safeUpdate);
+      res.json(updatedChore);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete chore
+  app.delete("/api/chores/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const chore = await storage.getChore(id);
+      if (!chore || chore.familyId !== user.familyId) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      await storage.deleteChore(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Complete chore
+  app.post("/api/chores/:id/complete", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const chore = await storage.getChore(id);
+      if (!chore || chore.familyId !== user.familyId) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      const validated = schema.insertChoreCompletionSchema.parse(req.body);
+      const completion = await storage.completeChore({
+        ...validated,
+        choreId: id,
+      });
+
+      res.json(completion);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get chore completions
+  app.get("/api/chores/:id/completions", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const chore = await storage.getChore(id);
+      if (!chore || chore.familyId !== user.familyId) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      const completions = await storage.getChoreCompletions(id);
+      res.json(completions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
