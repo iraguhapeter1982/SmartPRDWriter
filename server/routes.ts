@@ -630,6 +630,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Message routes
+  
+  // Get all messages for family
+  app.get("/api/messages", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const messages = await storage.getMessagesByFamily(user.familyId);
+      res.json(messages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Mark message as read
+  app.patch("/api/messages/:id/read", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const message = await storage.markMessageAsRead(id);
+      res.json(message);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Webhook for receiving school messages (no auth required for external services)
+  app.post("/api/webhooks/messages/:familyId", async (req, res) => {
+    try {
+      const { familyId } = req.params;
+      const { subject, sender, senderEmail, body, preview, isUrgent } = req.body;
+
+      // Verify family exists
+      const family = await storage.getFamily(familyId);
+      if (!family) {
+        return res.status(404).json({ message: "Family not found" });
+      }
+
+      // Create message
+      const message = await storage.createMessage({
+        familyId,
+        subject: subject || 'No Subject',
+        sender: sender || null,
+        senderEmail: senderEmail || null,
+        body: body || null,
+        preview: preview || body?.substring(0, 150) || null,
+        isUrgent: isUrgent || false,
+        isRead: false,
+      });
+
+      res.json({ success: true, message });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
