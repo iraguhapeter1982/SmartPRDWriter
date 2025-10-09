@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,18 @@ import { Users, UserPlus } from 'lucide-react';
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
-  const { refreshUser } = useAuth();
+  const { refreshUser, user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [familyName, setFamilyName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirect to dashboard when user has familyId
+  useEffect(() => {
+    if (!authLoading && user?.familyId) {
+      setLocation('/');
+    }
+  }, [user, authLoading, setLocation]);
 
   const handleCreateFamily = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,14 +40,13 @@ export default function OnboardingPage() {
         description: `Your invite code is: ${family.inviteCode}. Share it with family members.`,
       });
       
-      setLocation('/');
+      // Redirect will happen via useEffect when user state updates
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setLoading(false);
     }
   };
@@ -58,14 +64,13 @@ export default function OnboardingPage() {
         description: 'You have joined the family.',
       });
       
-      setLocation('/');
+      // Redirect will happen via useEffect when user state updates
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setLoading(false);
     }
   };

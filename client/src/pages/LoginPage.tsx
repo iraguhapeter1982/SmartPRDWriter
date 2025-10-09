@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -9,11 +9,22 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { signIn } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirect when user is authenticated
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (user.familyId) {
+        setLocation('/');
+      } else {
+        setLocation('/onboarding');
+      }
+    }
+  }, [user, authLoading, setLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,14 +32,13 @@ export default function LoginPage() {
     
     try {
       await signIn(email, password);
-      setLocation('/');
+      // Redirect will happen via useEffect when user state updates
     } catch (error: any) {
       toast({
         title: 'Login Failed',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setLoading(false);
     }
   };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,21 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SignupPage() {
   const [, setLocation] = useLocation();
-  const { signUp } = useAuth();
+  const { signUp, user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redirect to onboarding when user is created
+  useEffect(() => {
+    if (!authLoading && user && !user.familyId) {
+      setLocation('/onboarding');
+    } else if (!authLoading && user?.familyId) {
+      setLocation('/');
+    }
+  }, [user, authLoading, setLocation]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,14 +31,13 @@ export default function SignupPage() {
     
     try {
       await signUp(email, password, fullName);
-      setLocation('/onboarding');
+      // Redirect will happen via useEffect when user state updates
     } catch (error: any) {
       toast({
         title: 'Signup Failed',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setLoading(false);
     }
   };
