@@ -266,13 +266,27 @@ export class DbStorage implements IStorage {
     return await db.select().from(schema.lists).where(eq(schema.lists.familyId, familyId));
   }
 
+  async getList(id: string): Promise<List | undefined> {
+    const result = await db.select().from(schema.lists).where(eq(schema.lists.id, id)).limit(1);
+    return result[0];
+  }
+
   async createList(list: InsertList): Promise<List> {
     const result = await db.insert(schema.lists).values(list).returning();
     return result[0];
   }
 
+  async deleteList(id: string): Promise<void> {
+    await db.delete(schema.lists).where(eq(schema.lists.id, id));
+  }
+
   async getListItems(listId: string): Promise<ListItem[]> {
     return await db.select().from(schema.listItems).where(eq(schema.listItems.listId, listId));
+  }
+
+  async getListItem(id: string): Promise<ListItem | undefined> {
+    const result = await db.select().from(schema.listItems).where(eq(schema.listItems.id, id)).limit(1);
+    return result[0];
   }
 
   async createListItem(item: InsertListItem): Promise<ListItem> {

@@ -317,6 +317,181 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // List routes
+  
+  // Get all lists for family
+  app.get("/api/lists", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const lists = await storage.getListsByFamily(user.familyId);
+      res.json(lists);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create list
+  app.post("/api/lists", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const validated = schema.insertListSchema.parse(req.body);
+      const list = await storage.createList({
+        ...validated,
+        familyId: user.familyId,
+      });
+
+      res.json(list);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete list
+  app.delete("/api/lists/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const list = await storage.getList(id);
+      if (!list || list.familyId !== user.familyId) {
+        return res.status(404).json({ message: "List not found" });
+      }
+
+      await storage.deleteList(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get list items
+  app.get("/api/lists/:listId/items", requireAuth, async (req, res) => {
+    try {
+      const { listId } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const list = await storage.getList(listId);
+      if (!list || list.familyId !== user.familyId) {
+        return res.status(404).json({ message: "List not found" });
+      }
+
+      const items = await storage.getListItems(listId);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create list item
+  app.post("/api/lists/:listId/items", requireAuth, async (req, res) => {
+    try {
+      const { listId } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const list = await storage.getList(listId);
+      if (!list || list.familyId !== user.familyId) {
+        return res.status(404).json({ message: "List not found" });
+      }
+
+      const validated = schema.insertListItemSchema.parse(req.body);
+      const item = await storage.createListItem({
+        ...validated,
+        listId,
+      });
+
+      res.json(item);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update list item
+  app.patch("/api/lists/:listId/items/:id", requireAuth, async (req, res) => {
+    try {
+      const { listId, id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const list = await storage.getList(listId);
+      if (!list || list.familyId !== user.familyId) {
+        return res.status(404).json({ message: "List not found" });
+      }
+
+      const item = await storage.getListItem(id);
+      if (!item || item.listId !== listId) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+
+      // Convert ISO string dates to Date objects before validation
+      const payload = { ...req.body };
+      if (payload.purchasedAt && typeof payload.purchasedAt === 'string') {
+        payload.purchasedAt = new Date(payload.purchasedAt);
+      }
+
+      const validated = schema.insertListItemSchema.partial().parse(payload);
+      const { listId: _, ...safeUpdate } = validated;
+
+      const updatedItem = await storage.updateListItem(id, safeUpdate);
+      res.json(updatedItem);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete list item
+  app.delete("/api/lists/:listId/items/:id", requireAuth, async (req, res) => {
+    try {
+      const { listId, id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const list = await storage.getList(listId);
+      if (!list || list.familyId !== user.familyId) {
+        return res.status(404).json({ message: "List not found" });
+      }
+
+      const item = await storage.getListItem(id);
+      if (!item || item.listId !== listId) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+
+      await storage.deleteListItem(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
