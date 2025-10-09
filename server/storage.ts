@@ -92,6 +92,7 @@ export interface IStorage {
   // Subscription operations (family-level)
   getSubscriptionByFamily(familyId: string): Promise<Subscription | undefined>;
   getSubscriptionByUser(userId: string): Promise<Subscription | undefined>;
+  getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription>;
 }
@@ -380,6 +381,15 @@ export class DbStorage implements IStorage {
       .from(schema.subscriptions)
       .where(eq(schema.subscriptions.userId, userId))
       .orderBy(desc(schema.subscriptions.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined> {
+    const result = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.stripeSubscriptionId, stripeSubscriptionId))
       .limit(1);
     return result[0];
   }

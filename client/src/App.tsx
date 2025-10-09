@@ -17,6 +17,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import OnboardingPage from "@/pages/OnboardingPage";
+import SubscribePage from "@/pages/SubscribePage";
 import NotFound from "@/pages/not-found";
 
 function ProtectedApp() {
@@ -43,6 +44,7 @@ function ProtectedApp() {
                 <Route path="/chores" component={ChoresPage} />
                 <Route path="/school" component={SchoolHubPage} />
                 <Route path="/settings" component={SettingsPage} />
+                <Route path="/subscribe" component={SubscribePage} />
                 <Route component={NotFound} />
               </Switch>
             </div>

@@ -4,12 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calendar, CreditCard, Users, Bell, Mail, Trash2 } from 'lucide-react';
+import { Settings, Calendar, CreditCard, Users, Bell, Mail, Trash2, Crown } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useLocation } from 'wouter';
 import FamilyMemberDialog from '@/components/FamilyMemberDialog';
 import calendarSyncImage from '@assets/generated_images/Calendar_sync_integration_illustration_f7363b08.png';
 
@@ -47,6 +48,12 @@ export default function SettingsPage() {
   const { data: calendarConnections = [] } = useQuery<any[]>({
     queryKey: ['/api/calendar-connections'],
   });
+
+  const { data: subscriptionStatus } = useQuery<any>({
+    queryKey: ['/api/subscription/status'],
+  });
+
+  const [, setLocation] = useLocation();
 
   const connectCalendarMutation = useMutation({
     mutationFn: async () => {
@@ -369,20 +376,53 @@ export default function SettingsPage() {
             <CardDescription>Manage your subscription</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-card border">
-              <div>
-                <p className="font-semibold">Premium Plan</p>
-                <p className="text-sm text-muted-foreground">Unlimited calendars, lists, and chores</p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold">$9.99</p>
-                <p className="text-xs text-muted-foreground">per month</p>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <Button variant="outline">Manage Subscription</Button>
-              <Button variant="outline">View Billing History</Button>
-            </div>
+            {subscriptionStatus?.status === 'active' || subscriptionStatus?.status === 'trialing' ? (
+              <>
+                <div className="flex items-center justify-between p-4 rounded-lg bg-card border">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Crown className="h-4 w-4 text-yellow-500" />
+                      <p className="font-semibold">Premium Plan</p>
+                      <Badge variant="default">Active</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Renews on {new Date(subscriptionStatus.currentPeriodEnd).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold">$9.99</p>
+                    <p className="text-xs text-muted-foreground">per month</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <Button variant="outline" disabled>Manage Subscription</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-dashed">
+                  <div>
+                    <p className="font-semibold">Free Plan</p>
+                    <p className="text-sm text-muted-foreground">Basic family organization features</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold">$0</p>
+                    <p className="text-xs text-muted-foreground">forever</p>
+                  </div>
+                </div>
+                <Button 
+                  className="mt-4 w-full" 
+                  onClick={() => setLocation('/subscribe')}
+                  data-testid="button-upgrade-premium"
+                >
+                  <Crown className="h-4 w-4 mr-2" />
+                  Upgrade to Premium
+                </Button>
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Get unlimited calendars, advanced scheduling, and priority support
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

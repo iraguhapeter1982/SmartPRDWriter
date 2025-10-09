@@ -4,6 +4,15 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { randomBytes } from "crypto";
 import * as googleCalendar from "./google-calendar";
+import Stripe from "stripe";
+
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+if (!process.env.STRIPE_PRICE_ID) {
+  console.warn('WARNING: STRIPE_PRICE_ID is not set. Subscription creation will fail.');
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -689,6 +698,241 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message });
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stripe subscription routes
+
+  // Get or create subscription for current user's family
+  app.post('/api/subscription/create', requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+
+      if (!user?.familyId) {
+        return res.status(400).json({ message: "User must belong to a family" });
+      }
+
+      // Check if family already has an active subscription
+      const existingSubscription = await storage.getSubscriptionByFamily(user.familyId);
+      
+      if (existingSubscription?.stripeSubscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(existingSubscription.stripeSubscriptionId);
+        
+        if (subscription.status === 'active' || subscription.status === 'trialing') {
+          const latestInvoice = subscription.latest_invoice;
+          const paymentIntent = typeof latestInvoice === 'string' 
+            ? null 
+            : latestInvoice?.payment_intent;
+          const clientSecret = typeof paymentIntent === 'string' 
+            ? null 
+            : paymentIntent?.client_secret;
+
+          return res.json({
+            subscriptionId: subscription.id,
+            clientSecret: clientSecret,
+            status: subscription.status,
+          });
+        }
+      }
+
+      // Create Stripe customer if needed
+      let stripeCustomerId = existingSubscription?.stripeCustomerId;
+      
+      if (!stripeCustomerId) {
+        const customer = await stripe.customers.create({
+          email: user.email || undefined,
+          name: user.fullName || undefined,
+          metadata: {
+            familyId: user.familyId,
+            userId: user.id,
+          },
+        });
+        stripeCustomerId = customer.id;
+      }
+
+      // Validate STRIPE_PRICE_ID before creating subscription
+      if (!process.env.STRIPE_PRICE_ID) {
+        return res.status(500).json({ 
+          message: 'STRIPE_PRICE_ID is not configured. Please contact support.' 
+        });
+      }
+
+      // Create subscription
+      const subscription = await stripe.subscriptions.create({
+        customer: stripeCustomerId,
+        items: [{
+          price: process.env.STRIPE_PRICE_ID,
+        }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        expand: ['latest_invoice.payment_intent'],
+      });
+
+      const latestInvoice = subscription.latest_invoice;
+      const paymentIntent = typeof latestInvoice === 'string' 
+        ? null 
+        : latestInvoice?.payment_intent;
+      const clientSecret = typeof paymentIntent === 'string' 
+        ? null 
+        : paymentIntent?.client_secret;
+
+      // Save or update subscription in database
+      if (existingSubscription) {
+        await storage.updateSubscription(existingSubscription.id, {
+          stripeCustomerId,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: process.env.STRIPE_PRICE_ID || null,
+          status: subscription.status,
+          currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+          currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+        });
+      } else {
+        await storage.createSubscription({
+          familyId: user.familyId,
+          userId: user.id,
+          stripeCustomerId,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: process.env.STRIPE_PRICE_ID || null,
+          status: subscription.status,
+          currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+          currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+          cancelAtPeriodEnd: false,
+        });
+      }
+
+      res.json({
+        subscriptionId: subscription.id,
+        clientSecret,
+        status: subscription.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get subscription status for current user's family
+  app.get('/api/subscription/status', requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      
+      if (!user?.familyId) {
+        return res.json({ hasSubscription: false, status: 'inactive' });
+      }
+
+      const subscription = await storage.getSubscriptionByFamily(user.familyId);
+      
+      if (!subscription?.stripeSubscriptionId) {
+        return res.json({ hasSubscription: false, status: 'inactive' });
+      }
+
+      // Get latest status from Stripe
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+      
+      // Update local database with latest status
+      await storage.updateSubscription(subscription.id, {
+        status: stripeSubscription.status,
+        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+      });
+
+      res.json({
+        hasSubscription: true,
+        status: stripeSubscription.status,
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stripe webhook for handling events
+  app.post('/api/webhooks/stripe', async (req: any, res) => {
+    const sig = req.headers['stripe-signature'];
+    
+    if (!sig) {
+      return res.status(400).send('No signature');
+    }
+
+    // Stripe webhook signature verification requires STRIPE_WEBHOOK_SECRET
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      console.error('STRIPE_WEBHOOK_SECRET is not configured');
+      return res.status(500).send('Webhook secret not configured');
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      // Use raw body for signature verification
+      const rawBody = req.rawBody || JSON.stringify(req.body);
+      event = stripe.webhooks.constructEvent(
+        rawBody,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    try {
+      switch (event.type) {
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as Stripe.Subscription;
+          const dbSubscription = await storage.getSubscriptionByStripeId(subscription.id);
+          
+          if (dbSubscription) {
+            await storage.updateSubscription(dbSubscription.id, {
+              status: subscription.status,
+              currentPeriodStart: new Date(subscription.current_period_start * 1000),
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            });
+          }
+          break;
+        }
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as Stripe.Invoice;
+          if (invoice.subscription) {
+            const subscriptionId = typeof invoice.subscription === 'string' 
+              ? invoice.subscription 
+              : invoice.subscription.id;
+            const dbSubscription = await storage.getSubscriptionByStripeId(subscriptionId);
+            
+            if (dbSubscription) {
+              await storage.updateSubscription(dbSubscription.id, {
+                status: 'active',
+              });
+            }
+          }
+          break;
+        }
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as Stripe.Invoice;
+          if (invoice.subscription) {
+            const subscriptionId = typeof invoice.subscription === 'string' 
+              ? invoice.subscription 
+              : invoice.subscription.id;
+            const dbSubscription = await storage.getSubscriptionByStripeId(subscriptionId);
+            
+            if (dbSubscription) {
+              await storage.updateSubscription(dbSubscription.id, {
+                status: 'past_due',
+              });
+            }
+          }
+          break;
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('Error handling webhook:', error);
       res.status(500).json({ message: error.message });
     }
   });
