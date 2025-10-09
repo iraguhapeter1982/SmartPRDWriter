@@ -4,12 +4,90 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calendar, CreditCard, Users, Bell, Mail } from 'lucide-react';
+import { Settings, Calendar, CreditCard, Users, Bell, Mail, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+import FamilyMemberDialog from '@/components/FamilyMemberDialog';
 import calendarSyncImage from '@assets/generated_images/Calendar_sync_integration_illustration_f7363b08.png';
 
+type FamilyMember = {
+  id: string;
+  familyId: string;
+  name: string;
+  role: string | null;
+  birthYear: number | null;
+  color: string | null;
+  avatarUrl: string | null;
+};
+
+type Family = {
+  id: string;
+  name: string;
+  inviteCode: string | null;
+};
+
 export default function SettingsPage() {
-  const [familyName, setFamilyName] = useState('Johnson Family');
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<FamilyMember | undefined>();
+
+  const { data: family } = useQuery<Family>({
+    queryKey: ['/api/families/current'],
+  });
+
+  const { data: members = [], isLoading } = useQuery<FamilyMember[]>({
+    queryKey: ['/api/family-members'],
+    enabled: !!user?.familyId,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      await apiRequest('DELETE', `/api/family-members/${memberId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/family-members'] });
+      toast({
+        title: 'Success',
+        description: 'Family member removed',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleEdit = (member: FamilyMember) => {
+    setSelectedMember(member);
+    setDialogOpen(true);
+  };
+
+  const handleAdd = () => {
+    setSelectedMember(undefined);
+    setDialogOpen(true);
+  };
+
+  const handleDelete = async (memberId: string) => {
+    if (confirm('Are you sure you want to remove this family member?')) {
+      deleteMutation.mutate(memberId);
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <div className="space-y-6" data-testid="page-settings">
@@ -32,36 +110,63 @@ export default function SettingsPage() {
               <Label htmlFor="family-name">Family Name</Label>
               <Input 
                 id="family-name"
-                value={familyName}
-                onChange={(e) => setFamilyName(e.target.value)}
+                value={family?.name || ''}
+                disabled
                 data-testid="input-family-name"
               />
+              <p className="text-xs text-muted-foreground">
+                Invite Code: <span className="font-mono">{family?.inviteCode}</span>
+              </p>
             </div>
 
             <div className="space-y-3 pt-4 border-t">
               <Label>Family Members</Label>
-              <div className="space-y-2">
-                {[
-                  { name: 'Sarah Johnson', initials: 'SJ', color: 'hsl(30, 75%, 55%)', role: 'Parent' },
-                  { name: 'Mike Johnson', initials: 'MJ', color: 'hsl(150, 60%, 50%)', role: 'Parent' },
-                  { name: 'Emma Johnson', initials: 'EM', color: 'hsl(270, 65%, 60%)', role: 'Child' },
-                  { name: 'Lucas Johnson', initials: 'LJ', color: 'hsl(340, 70%, 58%)', role: 'Child' }
-                ].map((member) => (
-                  <div key={member.name} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback style={{ backgroundColor: member.color }} className="text-white text-xs">
-                        {member.initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{member.name}</p>
-                      <p className="text-xs text-muted-foreground">{member.role}</p>
+              {isLoading ? (
+                <div className="text-sm text-muted-foreground">Loading members...</div>
+              ) : members.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No family members yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {members.map((member) => (
+                    <div key={member.id} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
+                      <Avatar className="h-9 w-9">
+                        <AvatarFallback 
+                          style={{ backgroundColor: member.color || 'hsl(210, 70%, 55%)' }} 
+                          className="text-white text-xs"
+                        >
+                          {getInitials(member.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{member.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{member.role || 'Member'}</p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEdit(member)}
+                        data-testid={`button-edit-${member.id}`}
+                      >
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDelete(member.id)}
+                        data-testid={`button-delete-${member.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm">Edit</Button>
-                  </div>
-                ))}
-              </div>
-              <Button variant="outline" className="w-full" data-testid="button-add-member">
+                  ))}
+                </div>
+              )}
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={handleAdd}
+                data-testid="button-add-member"
+              >
                 Add Member
               </Button>
             </div>
@@ -92,19 +197,21 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between p-3 rounded-md bg-card border">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">SJ</AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      {user?.fullName ? getInitials(user.fullName) : 'U'}
+                    </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium">sarah.johnson@gmail.com</p>
-                    <p className="text-xs text-muted-foreground">Connected</p>
+                    <p className="text-sm font-medium">{user?.email || 'Not connected'}</p>
+                    <p className="text-xs text-muted-foreground">Not connected</p>
                   </div>
                 </div>
-                <Badge variant="secondary">Active</Badge>
+                <Badge variant="secondary">Inactive</Badge>
               </div>
               
               <Button variant="outline" className="w-full" data-testid="button-connect-calendar">
                 <Calendar className="h-4 w-4 mr-2" />
-                Connect Another Calendar
+                Connect Google Calendar
               </Button>
             </div>
           </CardContent>
@@ -154,7 +261,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="p-4 rounded-md bg-muted border-2 border-dashed">
               <p className="text-sm font-mono break-all" data-testid="text-forwarding-email">
-                johnson-family-abc123@familycmd.app
+                {family?.inviteCode?.toLowerCase()}-family@familycmd.app
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -190,6 +297,13 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <FamilyMemberDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        member={selectedMember}
+        familyId={user?.familyId || ''}
+      />
     </div>
   );
 }

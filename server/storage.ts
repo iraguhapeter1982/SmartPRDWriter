@@ -156,6 +156,11 @@ export class DbStorage implements IStorage {
     return await db.select().from(schema.familyMembers).where(eq(schema.familyMembers.familyId, familyId));
   }
 
+  async getFamilyMember(id: string): Promise<FamilyMember | undefined> {
+    const result = await db.select().from(schema.familyMembers).where(eq(schema.familyMembers.id, id)).limit(1);
+    return result[0];
+  }
+
   async createFamilyMember(member: InsertFamilyMember): Promise<FamilyMember> {
     const result = await db.insert(schema.familyMembers).values(member).returning();
     return result[0];

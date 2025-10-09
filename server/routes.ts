@@ -136,13 +136,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No family found" });
       }
 
+      // Validate request body
+      const validated = schema.insertFamilyMemberSchema.parse(req.body);
+
       const member = await storage.createFamilyMember({
-        ...req.body,
+        ...validated,
         familyId: user.familyId,
       });
 
       res.json(member);
     } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
       res.status(500).json({ message: error.message });
     }
   });
@@ -151,9 +157,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/family-members/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const member = await storage.updateFamilyMember(id, req.body);
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      // Verify member belongs to user's family
+      const existingMember = await storage.getFamilyMember(id);
+      if (!existingMember) {
+        return res.status(404).json({ message: "Family member not found" });
+      }
+      if (existingMember.familyId !== user.familyId) {
+        return res.status(403).json({ message: "Not authorized to update this member" });
+      }
+
+      // Validate request body (partial update)
+      const validated = schema.insertFamilyMemberSchema.partial().parse(req.body);
+      
+      // Remove protected fields that should not be modified by clients
+      const { familyId, ...safeUpdate } = validated;
+
+      const member = await storage.updateFamilyMember(id, safeUpdate);
       res.json(member);
     } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
       res.status(500).json({ message: error.message });
     }
   });
@@ -162,6 +191,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/family-members/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      // Verify member belongs to user's family
+      const existingMember = await storage.getFamilyMember(id);
+      if (!existingMember) {
+        return res.status(404).json({ message: "Family member not found" });
+      }
+      if (existingMember.familyId !== user.familyId) {
+        return res.status(403).json({ message: "Not authorized to delete this member" });
+      }
+
       await storage.deleteFamilyMember(id);
       res.json({ success: true });
     } catch (error: any) {

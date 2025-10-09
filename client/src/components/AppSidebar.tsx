@@ -13,6 +13,8 @@ import {
 import { Home, Calendar, ShoppingCart, CheckSquare, Mail, Settings, Users } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth';
 
 const menuItems = [
   { title: 'Dashboard', icon: Home, path: '/' },
@@ -22,8 +24,37 @@ const menuItems = [
   { title: 'School Hub', icon: Mail, path: '/school' },
 ];
 
+type FamilyMember = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
+type Family = {
+  name: string;
+};
+
 export default function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  const { data: family } = useQuery<Family>({
+    queryKey: ['/api/families/current'],
+  });
+
+  const { data: members = [] } = useQuery<FamilyMember[]>({
+    queryKey: ['/api/family-members'],
+    enabled: !!user?.familyId,
+  });
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <Sidebar data-testid="sidebar-main">
@@ -33,8 +64,8 @@ export default function AppSidebar() {
             <Users className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-semibold text-sm">Johnson Family</h2>
-            <p className="text-xs text-muted-foreground">4 members</p>
+            <h2 className="font-semibold text-sm">{family?.name || 'Family'}</h2>
+            <p className="text-xs text-muted-foreground">{members.length} members</p>
           </div>
         </div>
       </SidebarHeader>
@@ -62,37 +93,28 @@ export default function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Family Members</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <div className="space-y-2 px-2">
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(30, 75%, 55%)' }} className="text-white text-xs">SJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Sarah</span>
+        {members.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Family Members</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="space-y-2 px-2">
+                {members.map((member) => (
+                  <div key={member.id} className="flex items-center gap-2 p-2 rounded-md hover-elevate">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback 
+                        style={{ backgroundColor: member.color || 'hsl(210, 70%, 55%)' }} 
+                        className="text-white text-xs"
+                      >
+                        {getInitials(member.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm">{member.name}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(150, 60%, 50%)' }} className="text-white text-xs">MJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Mike</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(270, 65%, 60%)' }} className="text-white text-xs">EM</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Emma</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(340, 70%, 58%)' }} className="text-white text-xs">LJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Lucas</span>
-              </div>
-            </div>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-4">
