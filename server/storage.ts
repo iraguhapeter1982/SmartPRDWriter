@@ -189,6 +189,11 @@ export class DbStorage implements IStorage {
     return await db.select().from(schema.calendarConnections).where(eq(schema.calendarConnections.userId, userId));
   }
 
+  async getCalendarConnection(id: string): Promise<CalendarConnection | undefined> {
+    const result = await db.select().from(schema.calendarConnections).where(eq(schema.calendarConnections.id, id)).limit(1);
+    return result[0];
+  }
+
   async updateCalendarConnection(id: string, connection: Partial<InsertCalendarConnection>): Promise<CalendarConnection> {
     const result = await db
       .update(schema.calendarConnections)
@@ -231,6 +236,15 @@ export class DbStorage implements IStorage {
 
   async createEvent(event: InsertEvent): Promise<Event> {
     const result = await db.insert(schema.events).values(event).returning();
+    return result[0];
+  }
+
+  async getEventByGoogleId(googleEventId: string): Promise<Event | undefined> {
+    const result = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.googleEventId, googleEventId))
+      .limit(1);
     return result[0];
   }
 

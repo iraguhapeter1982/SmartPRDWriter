@@ -44,6 +44,51 @@ export default function SettingsPage() {
     enabled: !!user?.familyId,
   });
 
+  const { data: calendarConnections = [] } = useQuery<any[]>({
+    queryKey: ['/api/calendar-connections'],
+  });
+
+  const connectCalendarMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/calendar-connections/google');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar-connections'] });
+      toast({
+        title: 'Success',
+        description: 'Google Calendar connected successfully',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const syncCalendarMutation = useMutation({
+    mutationFn: async (connectionId: string) => {
+      const response = await apiRequest('POST', `/api/calendar-connections/${connectionId}/sync`);
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: 'Sync Complete',
+        description: `Synced ${data.syncedCount} new events from ${data.totalEvents} total`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Sync Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (memberId: string) => {
       await apiRequest('DELETE', `/api/family-members/${memberId}`);
@@ -194,25 +239,69 @@ export default function SettingsPage() {
             </div>
             
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-md bg-card border">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                      {user?.fullName ? getInitials(user.fullName) : 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{user?.email || 'Not connected'}</p>
-                    <p className="text-xs text-muted-foreground">Not connected</p>
+              {calendarConnections.length > 0 ? (
+                <>
+                  {calendarConnections.map((connection) => (
+                    <div key={connection.id} className="flex items-center justify-between p-3 rounded-md bg-card border">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                            {connection.googleAccountEmail ? getInitials(connection.googleAccountEmail) : 'GC'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{connection.googleAccountEmail || 'Google Calendar'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {connection.lastSyncedAt 
+                              ? `Last synced: ${new Date(connection.lastSyncedAt).toLocaleDateString()}`
+                              : 'Not synced yet'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">Active</Badge>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => syncCalendarMutation.mutate(connection.id)}
+                          disabled={syncCalendarMutation.isPending}
+                          data-testid="button-sync-calendar"
+                        >
+                          {syncCalendarMutation.isPending ? 'Syncing...' : 'Sync Now'}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-md bg-card border">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                        GC
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">Google Calendar</p>
+                      <p className="text-xs text-muted-foreground">Not connected</p>
+                    </div>
                   </div>
+                  <Badge variant="secondary">Inactive</Badge>
                 </div>
-                <Badge variant="secondary">Inactive</Badge>
-              </div>
+              )}
               
-              <Button variant="outline" className="w-full" data-testid="button-connect-calendar">
-                <Calendar className="h-4 w-4 mr-2" />
-                Connect Google Calendar
-              </Button>
+              {calendarConnections.length === 0 && (
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => connectCalendarMutation.mutate()}
+                  disabled={connectCalendarMutation.isPending}
+                  data-testid="button-connect-calendar"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  {connectCalendarMutation.isPending ? 'Connecting...' : 'Connect Google Calendar'}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

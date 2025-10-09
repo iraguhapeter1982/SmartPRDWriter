@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { randomBytes } from "crypto";
+import * as googleCalendar from "./google-calendar";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -206,6 +207,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.deleteFamilyMember(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Calendar routes
+  
+  // Get calendar connections for current user
+  app.get("/api/calendar-connections", requireAuth, async (req, res) => {
+    try {
+      const connections = await storage.getCalendarConnections(req.user!.id);
+      res.json(connections);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Connect Google Calendar
+  app.post("/api/calendar-connections/google", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      // Get calendar email from Google
+      const email = await googleCalendar.getCalendarEmail();
+      
+      // Create calendar connection record
+      const connection = await storage.createCalendarConnection({
+        userId: req.user!.id,
+        googleAccountEmail: email,
+        accessToken: "managed_by_replit",
+        refreshToken: null,
+        expiresAt: null,
+        lastSyncedAt: null,
+        syncStatus: "active",
+      });
+
+      res.json(connection);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Sync events from Google Calendar
+  app.post("/api/calendar-connections/:id/sync", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.user!.id);
+      
+      if (!user || !user.familyId) {
+        return res.status(404).json({ message: "No family found" });
+      }
+
+      const connection = await storage.getCalendarConnection(id);
+      if (!connection || connection.userId !== req.user!.id) {
+        return res.status(404).json({ message: "Calendar connection not found" });
+      }
+
+      // Sync events from Google Calendar
+      const googleEvents = await googleCalendar.syncCalendarEvents(req.user!.id, user.familyId);
+      
+      // Store events in database
+      const storedEvents = [];
+      for (const eventData of googleEvents) {
+        // Check if event already exists
+        const existing = await storage.getEventByGoogleId(eventData.googleEventId!);
+        if (!existing) {
+          const event = await storage.createEvent({
+            ...eventData,
+            calendarConnectionId: id,
+          });
+          storedEvents.push(event);
+        }
+      }
+
+      // Update last synced time
+      await storage.updateCalendarConnection(id, {
+        lastSyncedAt: new Date(),
+      });
+
+      res.json({ 
+        success: true, 
+        syncedCount: storedEvents.length,
+        totalEvents: googleEvents.length 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete calendar connection
+  app.delete("/api/calendar-connections/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await storage.getCalendarConnection(id);
+      
+      if (!connection || connection.userId !== req.user!.id) {
+        return res.status(404).json({ message: "Calendar connection not found" });
+      }
+
+      await storage.deleteCalendarConnection(id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
