@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useLocation } from 'wouter';
 import { supabase } from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -7,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  authError: string | null;
   signOut: () => Promise<void>;
 }
 
@@ -17,43 +17,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [location] = useLocation();
-
+  const [authError, setAuthError] = useState<string | null>(null);
+  // Only run effect once on mount
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    setAuthError(null);
+
+    // Timeout for session fetch (10s)
+    timeoutId = setTimeout(() => {
+      if (isMounted) {
+        setAuthError('Session fetch timed out. Check your Supabase config and network.');
+        setLoading(false);
+      }
+    }, 10000);
+
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!isMounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+        if (timeoutId) clearTimeout(timeoutId);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setAuthError('Failed to fetch session: ' + (err?.message || String(err)));
+        setLoading(false);
+        if (timeoutId) clearTimeout(timeoutId);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      setAuthError(null);
     });
 
     return () => {
       isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [location]);
+  }, []);
 
   const signOut = async () => {
     // Save current state in case we need to restore it
     const previousUser = user;
     const previousSession = session;
-    
-    // Optimistically clear state for immediate UI update
     setUser(null);
     setSession(null);
-    
     try {
       await supabase.auth.signOut();
     } catch (error) {
-      // Restore previous state if signOut fails
       setUser(previousUser);
       setSession(previousSession);
       throw error;
@@ -61,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, authError, signOut }}>
       {children}
     </AuthContext.Provider>
   );
