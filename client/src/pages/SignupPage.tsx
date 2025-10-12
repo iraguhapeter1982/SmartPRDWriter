@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -19,6 +20,16 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -90,6 +101,7 @@ export default function SignupPage() {
                 value={familyName}
                 onChange={(e) => setFamilyName(e.target.value)}
                 required
+                data-testid="input-family-name"
               />
             </div>
             <div className="space-y-2">
@@ -101,6 +113,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                data-testid="input-email"
               />
             </div>
             <div className="space-y-2">
@@ -113,9 +126,23 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                data-testid="input-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
+                data-testid="input-confirm-password"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
               {loading ? "Creating account..." : "Create Account"}
             </Button>
             <div className="text-center text-sm text-muted-foreground">
