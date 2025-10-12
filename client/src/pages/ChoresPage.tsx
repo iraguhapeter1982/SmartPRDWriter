@@ -2,233 +2,81 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Star, CheckSquare, Trophy, Edit, Trash2 } from 'lucide-react';
+import { Plus, Star, CheckSquare, Trophy } from 'lucide-react';
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-type Chore = {
+interface Chore {
   id: string;
-  familyId: string;
   title: string;
-  description: string | null;
-  assignedMemberId: string | null;
+  description?: string;
+  assignee: {
+    name: string;
+    initials: string;
+    color: string;
+  };
   points: number;
-  recurring: string | null;
-};
-
-type ChoreCompletion = {
-  id: string;
-  choreId: string;
-  completedByMemberId: string;
-  completedAt: Date;
-  pointsEarned: number;
-};
-
-type FamilyMember = {
-  id: string;
-  name: string;
-  color: string | null;
-};
+  recurring?: 'daily' | 'weekly';
+  completed: boolean;
+}
 
 export default function ChoresPage() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [choreDialog, setChoreDialog] = useState(false);
-  const [editingChore, setEditingChore] = useState<Chore | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    assignedMemberId: '',
-    points: '10',
-    recurring: '',
-  });
-
-  const { data: chores = [] } = useQuery<Chore[]>({
-    queryKey: ['/api/chores'],
-    enabled: !!user?.familyId,
-  });
-
-  const { data: members = [] } = useQuery<FamilyMember[]>({
-    queryKey: ['/api/family-members'],
-    enabled: !!user?.familyId,
-  });
-
-  const createChoreMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/chores', data);
-      return response.json();
+  //todo: remove mock functionality
+  const [chores, setChores] = useState<Chore[]>([
+    {
+      id: '1',
+      title: 'Clean bedroom',
+      description: 'Make bed, organize desk, vacuum floor',
+      assignee: { name: 'Emma', initials: 'EM', color: 'hsl(270, 65%, 60%)' },
+      points: 10,
+      recurring: 'daily',
+      completed: false
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chores'] });
-      setChoreDialog(false);
-      resetForm();
-      toast({
-        title: 'Success',
-        description: 'Chore created successfully',
-      });
+    {
+      id: '2',
+      title: 'Take out trash',
+      assignee: { name: 'Lucas', initials: 'LJ', color: 'hsl(150, 60%, 50%)' },
+      points: 5,
+      recurring: 'weekly',
+      completed: false
     },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
+    {
+      id: '3',
+      title: 'Feed the dog',
+      assignee: { name: 'Emma', initials: 'EM', color: 'hsl(270, 65%, 60%)' },
+      points: 5,
+      recurring: 'daily',
+      completed: true
     },
-  });
-
-  const updateChoreMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await apiRequest('PATCH', `/api/chores/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chores'] });
-      setChoreDialog(false);
-      resetForm();
-      toast({
-        title: 'Success',
-        description: 'Chore updated successfully',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const deleteChoreMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/chores/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chores'] });
-      toast({
-        title: 'Success',
-        description: 'Chore deleted',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const completeChoreMutation = useMutation({
-    mutationFn: async ({ choreId, memberId, points }: { choreId: string; memberId: string; points: number }) => {
-      const response = await apiRequest('POST', `/api/chores/${choreId}/complete`, {
-        completedByMemberId: memberId,
-        pointsEarned: points,
-        completedAt: new Date().toISOString(),
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chores'] });
-      toast({
-        title: 'Success',
-        description: 'Chore completed! Points earned.',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      assignedMemberId: '',
-      points: '10',
-      recurring: '',
-    });
-    setEditingChore(null);
-  };
-
-  const handleOpenDialog = (chore?: Chore) => {
-    if (chore) {
-      setEditingChore(chore);
-      setFormData({
-        title: chore.title,
-        description: chore.description || '',
-        assignedMemberId: chore.assignedMemberId || '',
-        points: chore.points.toString(),
-        recurring: chore.recurring || '',
-      });
-    } else {
-      resetForm();
+    {
+      id: '4',
+      title: 'Do homework',
+      assignee: { name: 'Lucas', initials: 'LJ', color: 'hsl(150, 60%, 50%)' },
+      points: 15,
+      completed: false
     }
-    setChoreDialog(true);
+  ]);
+
+  const handleComplete = (id: string) => {
+    setChores(prev => prev.map(chore => 
+      chore.id === id ? { ...chore, completed: !chore.completed } : chore
+    ));
+    console.log('Chore completed:', id);
   };
 
-  const handleSave = () => {
-    const data = {
-      title: formData.title,
-      description: formData.description || null,
-      assignedMemberId: formData.assignedMemberId || null,
-      points: parseInt(formData.points),
-      recurring: formData.recurring || null,
-    };
-
-    if (editingChore) {
-      updateChoreMutation.mutate({ id: editingChore.id, data });
-    } else {
-      createChoreMutation.mutate(data);
-    }
-  };
-
-  const handleComplete = (chore: Chore) => {
-    if (!chore.assignedMemberId) {
-      toast({
-        title: 'No assignee',
-        description: 'This chore needs to be assigned to someone first',
-        variant: 'destructive',
-      });
-      return;
-    }
-    completeChoreMutation.mutate({
-      choreId: chore.id,
-      memberId: chore.assignedMemberId,
-      points: chore.points,
-    });
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const getMemberById = (id: string) => {
-    return members.find(m => m.id === id);
-  };
+  const activeChores = chores.filter(c => !c.completed);
+  const completedChores = chores.filter(c => c.completed);
+  
+  //todo: remove mock functionality
+  const leaderboard = [
+    { name: 'Emma', initials: 'EM', color: 'hsl(270, 65%, 60%)', points: 125 },
+    { name: 'Lucas', initials: 'LJ', color: 'hsl(150, 60%, 50%)', points: 98 }
+  ];
 
   return (
     <div className="space-y-6" data-testid="page-chores">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Chores</h1>
-        <Button onClick={() => handleOpenDialog()} data-testid="button-add-chore">
+        <Button data-testid="button-add-chore">
           <Plus className="h-4 w-4 mr-2" />
           Add Chore
         </Button>
@@ -239,193 +87,106 @@ export default function ChoresPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckSquare className="h-5 w-5" />
-              Active Chores ({chores.length})
+              Active Chores ({activeChores.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {chores.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No chores yet. Add one to get started!</p>
-              </div>
-            ) : (
-              chores.map((chore) => {
-                const member = chore.assignedMemberId ? getMemberById(chore.assignedMemberId) : null;
-                return (
-                  <div 
-                    key={chore.id} 
-                    className="flex items-start gap-4 p-4 rounded-md border hover-elevate group"
-                    data-testid={`chore-item-${chore.id}`}
-                  >
-                    {member ? (
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback style={{ backgroundColor: member.color || 'hsl(210, 70%, 55%)' }} className="text-white">
-                          {getInitials(member.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                    ) : (
-                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                        <span className="text-muted-foreground text-xs">?</span>
-                      </div>
+            {activeChores.map((chore) => (
+              <div 
+                key={chore.id} 
+                className="flex items-start gap-4 p-4 rounded-md border hover-elevate"
+                data-testid={`chore-item-${chore.id}`}
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback style={{ backgroundColor: chore.assignee.color }} className="text-white">
+                    {chore.assignee.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold" data-testid={`text-chore-title-${chore.id}`}>{chore.title}</p>
+                  {chore.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{chore.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    {chore.recurring && (
+                      <Badge variant="outline">{chore.recurring}</Badge>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 flex-wrap">
-                        <h3 className="font-medium" data-testid={`text-chore-title-${chore.id}`}>{chore.title}</h3>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="flex items-center gap-1">
-                            <Star className="h-3 w-3" />
-                            {chore.points}
-                          </Badge>
-                          {chore.recurring && (
-                            <Badge variant="outline">{chore.recurring}</Badge>
-                          )}
-                        </div>
-                      </div>
-                      {chore.description && (
-                        <p className="text-sm text-muted-foreground mt-1">{chore.description}</p>
-                      )}
-                      <div className="flex gap-2 mt-3">
-                        <Button 
-                          size="sm" 
-                          onClick={() => handleComplete(chore)}
-                          disabled={completeChoreMutation.isPending}
-                          data-testid={`button-complete-${chore.id}`}
-                        >
-                          <CheckSquare className="h-3 w-3 mr-1" />
-                          Complete
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          onClick={() => handleOpenDialog(chore)}
-                          data-testid={`button-edit-${chore.id}`}
-                        >
-                          <Edit className="h-3 w-3 mr-1" />
-                          Edit
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          onClick={() => deleteChoreMutation.mutate(chore.id)}
-                          data-testid={`button-delete-${chore.id}`}
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Delete
-                        </Button>
-                      </div>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Star className="h-4 w-4 fill-current text-chart-4" />
+                      <span className="font-medium">{chore.points} pts</span>
                     </div>
                   </div>
-                );
-              })
-            )}
+                </div>
+                <Button 
+                  onClick={() => handleComplete(chore.id)}
+                  data-testid={`button-complete-${chore.id}`}
+                >
+                  Complete
+                </Button>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5" />
+              <Trophy className="h-5 w-5 text-chart-4" />
               Leaderboard
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Leaderboard coming soon
-            </p>
+            {leaderboard.map((member, index) => (
+              <div 
+                key={member.name} 
+                className="flex items-center gap-3 p-3 rounded-md hover-elevate"
+                data-testid={`leaderboard-${index + 1}`}
+              >
+                <div className="text-2xl font-bold text-muted-foreground w-8 text-center">
+                  {index + 1}
+                </div>
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback style={{ backgroundColor: member.color }} className="text-white">
+                    {member.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <p className="font-semibold">{member.name}</p>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Star className="h-3 w-3 fill-current" />
+                    <span>{member.points} points</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      <Dialog open={choreDialog} onOpenChange={(open) => {
-        setChoreDialog(open);
-        if (!open) resetForm();
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingChore ? 'Edit Chore' : 'Add New Chore'}</DialogTitle>
-            <DialogDescription>
-              {editingChore ? 'Update chore details' : 'Create a new chore for the family'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="e.g., Clean bedroom"
-                data-testid="input-chore-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Additional details about the chore"
-                data-testid="input-chore-description"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="assignee">Assign to</Label>
-              <Select value={formData.assignedMemberId} onValueChange={(value) => setFormData({ ...formData, assignedMemberId: value })}>
-                <SelectTrigger data-testid="select-assignee">
-                  <SelectValue placeholder="Select family member" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
-                  {members.map((member) => (
-                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="points">Points</Label>
-                <Input
-                  id="points"
-                  type="number"
-                  value={formData.points}
-                  onChange={(e) => setFormData({ ...formData, points: e.target.value })}
-                  data-testid="input-chore-points"
-                />
+      {completedChores.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-muted-foreground">Recently Completed</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {completedChores.map((chore) => (
+              <div 
+                key={chore.id} 
+                className="flex items-center gap-3 p-3 rounded-md opacity-60"
+                data-testid={`completed-chore-${chore.id}`}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback style={{ backgroundColor: chore.assignee.color }} className="text-white text-xs">
+                    {chore.assignee.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="flex-1 line-through">{chore.title}</span>
+                <Badge variant="secondary">Done</Badge>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="recurring">Recurring</Label>
-                <Select value={formData.recurring} onValueChange={(value) => setFormData({ ...formData, recurring: value })}>
-                  <SelectTrigger data-testid="select-recurring">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">One-time</SelectItem>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setChoreDialog(false);
-              resetForm();
-            }}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSave} 
-              disabled={createChoreMutation.isPending || updateChoreMutation.isPending}
-              data-testid="button-save-chore"
-            >
-              {(createChoreMutation.isPending || updateChoreMutation.isPending) ? 'Saving...' : 'Save Chore'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
