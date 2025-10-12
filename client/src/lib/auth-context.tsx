@@ -35,7 +35,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // Save current state in case we need to restore it
+    const previousUser = user;
+    const previousSession = session;
+    
+    // Optimistically clear state for immediate UI update
+    setUser(null);
+    setSession(null);
+    
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      // Restore previous state if signOut fails
+      setUser(previousUser);
+      setSession(previousSession);
+      throw error;
+    }
   };
 
   return (
