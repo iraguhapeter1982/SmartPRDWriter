@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "./db";
-import { families, familyMembers, familyInvites } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { families, familyMembers, familyInvites, calendarEvents } from "@shared/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { supabaseAdmin } from "./supabase";
 import { requireAuth, type AuthRequest } from "./middleware/auth";
+import { syncGoogleCalendarEvents } from "./services/google-calendar";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create a family (called after signup)
@@ -272,6 +273,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(invites);
     } catch (error: any) {
       console.error("Error fetching invites:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Sync Google Calendar events
+  app.post("/api/families/:familyId/calendar/sync", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { familyId } = req.params;
+      const userId = req.userId!;
+
+      // Verify user is a member of the family
+      const [membership] = await db
+        .select()
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.familyId, familyId),
+            eq(familyMembers.userId, userId)
+          )
+        );
+
+      if (!membership) {
+        return res.status(403).json({ error: "Not authorized to sync calendar for this family" });
+      }
+
+      // Get events from Google Calendar
+      const googleEvents = await syncGoogleCalendarEvents();
+
+      // Store events in database
+      const syncedEvents = [];
+      for (const event of googleEvents) {
+        const startTime = event.start.dateTime || event.start.date;
+        const endTime = event.end.dateTime || event.end.date;
+
+        if (!startTime || !endTime) continue;
+
+        // Check if event already exists
+        const [existingEvent] = await db
+          .select()
+          .from(calendarEvents)
+          .where(
+            and(
+              eq(calendarEvents.familyId, familyId),
+              eq(calendarEvents.googleEventId, event.id)
+            )
+          );
+
+        let dbEvent;
+        if (existingEvent) {
+          // Update existing event
+          [dbEvent] = await db
+            .update(calendarEvents)
+            .set({
+              title: event.summary || 'Untitled Event',
+              description: event.description,
+              startTime: new Date(startTime),
+              endTime: new Date(endTime),
+              location: event.location,
+              updatedAt: new Date(),
+            })
+            .where(eq(calendarEvents.id, existingEvent.id))
+            .returning();
+        } else {
+          // Insert new event
+          [dbEvent] = await db
+            .insert(calendarEvents)
+            .values({
+              familyId,
+              googleEventId: event.id,
+              title: event.summary || 'Untitled Event',
+              description: event.description,
+              startTime: new Date(startTime),
+              endTime: new Date(endTime),
+              location: event.location,
+            })
+            .returning();
+        }
+
+        syncedEvents.push(dbEvent);
+      }
+
+      res.json({ 
+        message: `Synced ${syncedEvents.length} events`,
+        events: syncedEvents 
+      });
+    } catch (error: any) {
+      console.error("Error syncing calendar:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get calendar events for a family
+  app.get("/api/families/:familyId/calendar/events", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { familyId } = req.params;
+      const userId = req.userId!;
+      const { startDate, endDate } = req.query;
+
+      // Verify user is a member of the family
+      const [membership] = await db
+        .select()
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.familyId, familyId),
+            eq(familyMembers.userId, userId)
+          )
+        );
+
+      if (!membership) {
+        return res.status(403).json({ error: "Not authorized to view calendar for this family" });
+      }
+
+      // Build query with optional date filters
+      let query = db
+        .select()
+        .from(calendarEvents)
+        .where(eq(calendarEvents.familyId, familyId))
+        .$dynamic();
+
+      if (startDate) {
+        query = query.where(gte(calendarEvents.startTime, new Date(startDate as string)));
+      }
+
+      if (endDate) {
+        query = query.where(lte(calendarEvents.endTime, new Date(endDate as string)));
+      }
+
+      const events = await query;
+
+      res.json(events);
+    } catch (error: any) {
+      console.error("Error fetching calendar events:", error);
       res.status(500).json({ error: error.message });
     }
   });
