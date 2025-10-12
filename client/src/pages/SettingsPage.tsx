@@ -5,11 +5,37 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Settings, Calendar, CreditCard, Users, Bell, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { authenticatedFetch } from '@/lib/api';
+import InviteFamily from '@/components/InviteFamily';
 import calendarSyncImage from '@assets/generated_images/Calendar_sync_integration_illustration_f7363b08.png';
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [familyName, setFamilyName] = useState('Johnson Family');
+  const [userFamily, setUserFamily] = useState<any>(null);
+
+  useEffect(() => {
+    const loadFamily = async () => {
+      if (!user) return;
+      
+      try {
+        const response = await authenticatedFetch(`/api/families`);
+        if (response.ok) {
+          const families = await response.json();
+          if (families.length > 0) {
+            setUserFamily(families[0].family);
+            setFamilyName(families[0].family.name);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading family:', error);
+      }
+    };
+
+    loadFamily();
+  }, [user]);
 
   return (
     <div className="space-y-6" data-testid="page-settings">
@@ -61,12 +87,15 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full" data-testid="button-add-member">
-                Add Member
-              </Button>
             </div>
           </CardContent>
         </Card>
+
+        {userFamily && (
+          <Card className="lg:col-span-2">
+            <InviteFamily familyId={userFamily.id} />
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -164,31 +193,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Subscription & Billing
-            </CardTitle>
-            <CardDescription>Manage your subscription</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-card border">
-              <div>
-                <p className="font-semibold">Premium Plan</p>
-                <p className="text-sm text-muted-foreground">Unlimited calendars, lists, and chores</p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold">$9.99</p>
-                <p className="text-xs text-muted-foreground">per month</p>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <Button variant="outline">Manage Subscription</Button>
-              <Button variant="outline">View Billing History</Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
