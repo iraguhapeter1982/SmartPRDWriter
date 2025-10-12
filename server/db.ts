@@ -10,5 +10,10 @@ if (!process.env.DATABASE_URL) {
 // Configure WebSocket for Neon serverless in Node.js environment
 neonConfig.webSocketConstructor = ws;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 export const db = drizzle({ client: pool, schema });
