@@ -46,7 +46,7 @@ function AppRouter() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const authPaths = ["/login", "/signup", "/accept-invite"];
   const isAuthPage = authPaths.some(path => location.startsWith(path));
@@ -67,7 +67,13 @@ function AppLayout() {
   }
 
   if (!user) {
-    return <AuthRouter />;
+    // Redirect to /login if not already on an auth page
+    setTimeout(() => {
+      if (!authPaths.some(path => location.startsWith(path))) {
+        setLocation("/login");
+      }
+    }, 0);
+    return null;
   }
 
   const style = {

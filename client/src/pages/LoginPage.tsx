@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +32,7 @@ export default function LoginPage() {
         title: "Success",
         description: "You've been logged in successfully",
       });
-      setLocation("/");
+      // Do not redirect here; wait for user to be set
     } catch (error: any) {
       toast({
         title: "Error",
@@ -41,6 +43,13 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Redirect to dashboard only after user is set
+  useEffect(() => {
+    if (user) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
