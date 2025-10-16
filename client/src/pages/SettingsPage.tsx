@@ -22,12 +22,15 @@ export default function SettingsPage() {
       
       try {
         const response = await authenticatedFetch(`/api/families`);
+        
         if (response.ok) {
           const families = await response.json();
           if (families.length > 0) {
             setUserFamily(families[0].family);
             setFamilyName(families[0].family.name);
           }
+        } else {
+          console.error('Failed to load family:', response.status);
         }
       } catch (error) {
         console.error('Error loading family:', error);
@@ -90,7 +93,6 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-
         {userFamily && (
           <Card className="lg:col-span-2">
             <InviteFamily familyId={userFamily.id} />

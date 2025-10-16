@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { authenticatedFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +15,15 @@ export default function SignupPage() {
   const [familyName, setFamilyName] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Pre-fill email if coming from invitation
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, []);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,40 +46,46 @@ export default function SignupPage() {
         options: {
           data: {
             family_name: familyName,
+            full_name: familyName + " Admin",
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         },
       });
 
       if (error) throw error;
 
+      // Store signup data for post-confirmation processing
       if (data.user) {
-        const familyResponse = await authenticatedFetch("/api/families", {
-          method: "POST",
-          body: JSON.stringify({
-            name: familyName,
-          }),
-        });
+        const signupData: {
+          userId: string;
+          familyName: string;
+          email: string;
+          isNewFamily: boolean;
+          inviteToken?: string;
+        } = {
+          userId: data.user.id,
+          familyName: familyName,
+          email: email,
+          isNewFamily: true
+        };
 
-        if (!familyResponse.ok) {
-          throw new Error("Failed to create family");
-        }
-
+        // Check for pending invite
         const pendingInvite = localStorage.getItem("pendingInvite");
         if (pendingInvite) {
-          await authenticatedFetch(`/api/invites/${pendingInvite}/accept`, {
-            method: "POST",
-            body: JSON.stringify({}),
-          });
+          signupData.isNewFamily = false;
+          signupData.inviteToken = pendingInvite;
           localStorage.removeItem("pendingInvite");
         }
+
+        localStorage.setItem('pendingSignup', JSON.stringify(signupData));
       }
 
+      // Never redirect to dashboard - always show email confirmation message
       toast({
-        title: "Success",
-        description: "Account created successfully!",
+        title: "Check your email",
+        description: "We've sent you a confirmation link. Please click it to activate your account and complete your setup.",
       });
-      
-      setLocation("/");
+
     } catch (error: any) {
       toast({
         title: "Error",

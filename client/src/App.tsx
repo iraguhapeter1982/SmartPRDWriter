@@ -17,6 +17,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import AcceptInvitePage from "@/pages/AcceptInvitePage";
+import AuthCallback from "@/pages/AuthCallback";
 import NotFound from "@/pages/not-found";
 
 function AuthRouter() {
@@ -25,6 +26,7 @@ function AuthRouter() {
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/accept-invite/:token" component={AcceptInvitePage} />
+      <Route path="/auth/callback" component={AuthCallback} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -48,7 +50,7 @@ function AppLayout() {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  const authPaths = ["/login", "/signup", "/accept-invite"];
+  const authPaths = ["/login", "/signup", "/accept-invite", "/auth/callback"];
   const isAuthPage = authPaths.some(path => location.startsWith(path));
 
   if (isAuthPage) {
