@@ -13,6 +13,9 @@ import {
 import { Home, Calendar, ShoppingCart, CheckSquare, Mail, Settings, Users } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { authenticatedFetch } from '@/lib/api';
 
 const menuItems = [
   { title: 'Dashboard', icon: Home, path: '/' },
@@ -24,6 +27,42 @@ const menuItems = [
 
 export default function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+  const [userFamily, setUserFamily] = useState<any>(null);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [loadingFamily, setLoadingFamily] = useState(true);
+
+  useEffect(() => {
+    const loadFamilyData = async () => {
+      if (!user) return;
+      
+      try {
+        setLoadingFamily(true);
+        
+        // Load family info
+        const familyResponse = await authenticatedFetch(`/api/families`);
+        if (familyResponse.ok) {
+          const families = await familyResponse.json();
+          if (families.length > 0) {
+            setUserFamily(families[0].family);
+          }
+        }
+
+        // Load family members
+        const membersResponse = await authenticatedFetch(`/api/family-members`);
+        if (membersResponse.ok) {
+          const members = await membersResponse.json();
+          setFamilyMembers(members);
+        }
+      } catch (error) {
+        console.error('Error loading family data:', error);
+      } finally {
+        setLoadingFamily(false);
+      }
+    };
+
+    loadFamilyData();
+  }, [user]);
 
   return (
     <Sidebar data-testid="sidebar-main">
@@ -33,8 +72,12 @@ export default function AppSidebar() {
             <Users className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-semibold text-sm">Johnson Family</h2>
-            <p className="text-xs text-muted-foreground">4 members</p>
+            <h2 className="font-semibold text-sm">
+              {loadingFamily ? 'Loading...' : userFamily?.name || 'Your Family'}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {loadingFamily ? '...' : `${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''}`}
+            </p>
           </div>
         </div>
       </SidebarHeader>
@@ -66,30 +109,46 @@ export default function AppSidebar() {
           <SidebarGroupLabel>Family Members</SidebarGroupLabel>
           <SidebarGroupContent>
             <div className="space-y-2 px-2">
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(30, 75%, 55%)' }} className="text-white text-xs">SJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Sarah</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(150, 60%, 50%)' }} className="text-white text-xs">MJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Mike</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(270, 65%, 60%)' }} className="text-white text-xs">EM</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Emma</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover-elevate">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback style={{ backgroundColor: 'hsl(340, 70%, 58%)' }} className="text-white text-xs">LJ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm">Lucas</span>
-              </div>
+              {loadingFamily ? (
+                // Loading skeleton
+                [...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-md">
+                    <div className="h-6 w-6 bg-muted rounded-full animate-pulse"></div>
+                    <div className="h-4 bg-muted rounded animate-pulse w-16"></div>
+                  </div>
+                ))
+              ) : familyMembers.length > 0 ? (
+                familyMembers.map((member) => {
+                  // Generate initials from name
+                  const initials = member.name
+                    .split(' ')
+                    .map((n: string) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2);
+                  
+                  // Use member color or generate a default
+                  const backgroundColor = member.color || `hsl(${Math.abs(member.name.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0)) % 360}, 65%, 55%)`;
+                  
+                  // Get first name for display
+                  const firstName = member.name.split(' ')[0];
+                  
+                  return (
+                    <div key={member.id} className="flex items-center gap-2 p-2 rounded-md hover-elevate">
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback style={{ backgroundColor }} className="text-white text-xs">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">{firstName}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="px-2 py-4 text-center">
+                  <p className="text-xs text-muted-foreground">No members yet</p>
+                </div>
+              )}
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
