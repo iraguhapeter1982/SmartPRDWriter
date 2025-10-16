@@ -127,6 +127,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create family invite
+  app.post("/api/invites", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { familyId, email } = req.body;
+
+      if (!familyId || !email) {
+        return res.status(400).json({ error: "Family ID and email are required" });
+      }
+
+      const { supabaseAdmin } = await import("./supabase");
+
+      // Verify user belongs to the family
+      const { data: user, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('family_id, role')
+        .eq('id', userId)
+        .single();
+
+      if (userError || user.family_id !== familyId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Generate a unique token
+      const crypto = await import('crypto');
+      const token = crypto.randomUUID();
+      
+      // Create the invite
+      const { data: invite, error: inviteError } = await supabaseAdmin
+        .from('family_invites')
+        .insert({
+          family_id: familyId,
+          email: email,
+          token: token,
+          invited_by: userId,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days from now
+        })
+        .select()
+        .single();
+
+      if (inviteError) {
+        console.error('Error creating invite:', inviteError);
+        throw inviteError;
+      }
+
+      res.json(invite);
+    } catch (error: any) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
