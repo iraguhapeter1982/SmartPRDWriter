@@ -100,7 +100,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         {userFamily && (
-          <Card className="lg:col-span-2">
+          <Card>
             <InviteFamily familyId={userFamily.id} />
           </Card>
         )}

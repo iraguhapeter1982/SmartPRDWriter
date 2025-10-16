@@ -61,30 +61,30 @@ export default function InviteFamily({ familyId }: InviteFamilyProps) {
   };
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
-        <CardTitle>Invite Family Member</CardTitle>
-        <CardDescription>
-          Send an invitation to add someone to your family
-        </CardDescription>
+      <CardTitle>Invite Family Member</CardTitle>
+      <CardDescription>
+        Send an invitation to add someone to your family
+      </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleInvite} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="invite-email">Email Address</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              placeholder="member@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Sending..." : "Send Invite"}
-          </Button>
-        </form>
+      <form onSubmit={handleInvite} className="space-y-4">
+        <div className="space-y-2">
+        <Label htmlFor="invite-email">Email Address</Label>
+        <Input
+          id="invite-email"
+          type="email"
+          placeholder="member@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        </div>
+        <Button type="submit" disabled={loading}>
+        {loading ? "Sending..." : "Send Invite"}
+        </Button>
+      </form>
       </CardContent>
     </Card>
   );
