@@ -7,61 +7,21 @@ import { Badge } from '@/components/ui/badge';
 import { Settings, Calendar, CreditCard, Users, Bell, Mail } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useFamily } from '@/lib/family-context';
 import { authenticatedFetch } from '@/lib/api';
 import InviteFamily from '@/components/InviteFamily';
 import calendarSyncImage from '@assets/generated_images/Calendar_sync_integration_illustration_f7363b08.png';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { family: userFamily, members: familyMembers, loading: loadingMembers, refreshFamily } = useFamily();
   const [familyName, setFamilyName] = useState('Johnson Family');
-  const [userFamily, setUserFamily] = useState<any>(null);
-  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(true);
 
   useEffect(() => {
-    const loadFamily = async () => {
-      if (!user) return;
-      
-      try {
-        const response = await authenticatedFetch(`/api/families`);
-        
-        if (response.ok) {
-          const families = await response.json();
-          if (families.length > 0) {
-            setUserFamily(families[0].family);
-            setFamilyName(families[0].family.name);
-          }
-        } else {
-          console.error('Failed to load family:', response.status);
-        }
-      } catch (error) {
-        console.error('Error loading family:', error);
-      }
-    };
-
-    const loadFamilyMembers = async () => {
-      if (!user) return;
-      
-      try {
-        setLoadingMembers(true);
-        const response = await authenticatedFetch(`/api/family-members`);
-        
-        if (response.ok) {
-          const members = await response.json();
-          setFamilyMembers(members);
-        } else {
-          console.error('Failed to load family members:', response.status);
-        }
-      } catch (error) {
-        console.error('Error loading family members:', error);
-      } finally {
-        setLoadingMembers(false);
-      }
-    };
-
-    loadFamily();
-    loadFamilyMembers();
-  }, [user]);
+    if (userFamily?.name) {
+      setFamilyName(userFamily.name);
+    }
+  }, [userFamily]);
 
   return (
     <div className="space-y-6" data-testid="page-settings">

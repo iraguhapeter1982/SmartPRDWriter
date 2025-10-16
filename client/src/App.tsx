@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "./lib/auth-context";
+import { FamilyProvider } from "./lib/family-context";
 import AppSidebar from "@/components/AppSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
@@ -110,10 +111,12 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <AppLayout />
-          <Toaster />
-        </TooltipProvider>
+        <FamilyProvider>
+          <TooltipProvider>
+            <AppLayout />
+            <Toaster />
+          </TooltipProvider>
+        </FamilyProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

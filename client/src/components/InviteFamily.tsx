@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useFamily } from "@/lib/family-context";
 import { authenticatedFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ interface InviteFamilyProps {
 
 export default function InviteFamily({ familyId }: InviteFamilyProps) {
   const { user } = useAuth();
+  const { refreshFamily } = useFamily();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -44,6 +46,9 @@ export default function InviteFamily({ familyId }: InviteFamilyProps) {
       });
 
       setEmail("");
+      
+      // Refresh family data to show any updates
+      await refreshFamily();
     } catch (error: any) {
       toast({
         title: "Error",

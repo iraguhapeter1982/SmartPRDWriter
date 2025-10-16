@@ -13,9 +13,7 @@ import {
 import { Home, Calendar, ShoppingCart, CheckSquare, Mail, Settings, Users } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { authenticatedFetch } from '@/lib/api';
+import { useFamily } from '@/lib/family-context';
 
 const menuItems = [
   { title: 'Dashboard', icon: Home, path: '/' },
@@ -27,42 +25,7 @@ const menuItems = [
 
 export default function AppSidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
-  const [userFamily, setUserFamily] = useState<any>(null);
-  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
-  const [loadingFamily, setLoadingFamily] = useState(true);
-
-  useEffect(() => {
-    const loadFamilyData = async () => {
-      if (!user) return;
-      
-      try {
-        setLoadingFamily(true);
-        
-        // Load family info
-        const familyResponse = await authenticatedFetch(`/api/families`);
-        if (familyResponse.ok) {
-          const families = await familyResponse.json();
-          if (families.length > 0) {
-            setUserFamily(families[0].family);
-          }
-        }
-
-        // Load family members
-        const membersResponse = await authenticatedFetch(`/api/family-members`);
-        if (membersResponse.ok) {
-          const members = await membersResponse.json();
-          setFamilyMembers(members);
-        }
-      } catch (error) {
-        console.error('Error loading family data:', error);
-      } finally {
-        setLoadingFamily(false);
-      }
-    };
-
-    loadFamilyData();
-  }, [user]);
+  const { family: userFamily, members: familyMembers, loading: loadingFamily } = useFamily();
 
   return (
     <Sidebar data-testid="sidebar-main">
