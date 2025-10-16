@@ -142,6 +142,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get family members
+  app.get("/api/family-members", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { supabaseAdmin } = await import("./supabase");
+
+      // Get user's family_id
+      const { data: user, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('family_id')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !user.family_id) {
+        return res.status(404).json({ error: "User has no family" });
+      }
+
+      // Get family members
+      const { data: members, error: membersError } = await supabaseAdmin
+        .from('family_members')
+        .select('*')
+        .eq('family_id', user.family_id)
+        .order('created_at');
+
+      if (membersError) {
+        console.error('Error fetching family members:', membersError);
+        throw membersError;
+      }
+
+      res.json(members || []);
+    } catch (error: any) {
+      console.error("Error fetching family members:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Create family invite
   app.post("/api/invites", requireAuth, async (req: AuthRequest, res) => {
     try {

@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const [familyName, setFamilyName] = useState('Johnson Family');
   const [userFamily, setUserFamily] = useState<any>(null);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
   useEffect(() => {
     const loadFamily = async () => {
@@ -37,7 +39,28 @@ export default function SettingsPage() {
       }
     };
 
+    const loadFamilyMembers = async () => {
+      if (!user) return;
+      
+      try {
+        setLoadingMembers(true);
+        const response = await authenticatedFetch(`/api/family-members`);
+        
+        if (response.ok) {
+          const members = await response.json();
+          setFamilyMembers(members);
+        } else {
+          console.error('Failed to load family members:', response.status);
+        }
+      } catch (error) {
+        console.error('Error loading family members:', error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
     loadFamily();
+    loadFamilyMembers();
   }, [user]);
 
   return (
@@ -70,25 +93,48 @@ export default function SettingsPage() {
             <div className="space-y-3 pt-4 border-t">
               <Label>Family Members</Label>
               <div className="space-y-2">
-                {[
-                  { name: 'Sarah Johnson', initials: 'SJ', color: 'hsl(30, 75%, 55%)', role: 'Parent' },
-                  { name: 'Mike Johnson', initials: 'MJ', color: 'hsl(150, 60%, 50%)', role: 'Parent' },
-                  { name: 'Emma Johnson', initials: 'EM', color: 'hsl(270, 65%, 60%)', role: 'Child' },
-                  { name: 'Lucas Johnson', initials: 'LJ', color: 'hsl(340, 70%, 58%)', role: 'Child' }
-                ].map((member) => (
-                  <div key={member.name} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback style={{ backgroundColor: member.color }} className="text-white text-xs">
-                        {member.initials}
-                      </AvatarFallback>
-                    </Avatar>
+                {loadingMembers ? (
+                  <div className="flex items-center gap-3 p-2 rounded-md">
+                    <div className="h-9 w-9 bg-muted rounded-full animate-pulse"></div>
                     <div className="flex-1">
-                      <p className="font-medium text-sm">{member.name}</p>
-                      <p className="text-xs text-muted-foreground">{member.role}</p>
+                      <div className="h-4 bg-muted rounded animate-pulse mb-1"></div>
+                      <div className="h-3 bg-muted rounded animate-pulse w-16"></div>
                     </div>
-                    <Button variant="ghost" size="sm">Edit</Button>
                   </div>
-                ))}
+                ) : familyMembers.length > 0 ? (
+                  familyMembers.map((member) => {
+                    // Generate initials from name
+                    const initials = member.name
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2);
+                    
+                    // Use member color or generate a default
+                    const backgroundColor = member.color || `hsl(${Math.abs(member.name.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0)) % 360}, 65%, 55%)`;
+                    
+                    return (
+                      <div key={member.id} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback style={{ backgroundColor }} className="text-white text-xs">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{member.name}</p>
+                          <p className="text-xs text-muted-foreground">{member.role || 'Member'}</p>
+                        </div>
+                        <Button variant="ghost" size="sm">Edit</Button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">No family members found</p>
+                    <p className="text-xs">Invite family members to get started</p>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
