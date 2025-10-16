@@ -91,6 +91,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw updateError;
         }
 
+        // Create family member record for the user
+        const { error: memberError } = await supabaseAdmin
+          .from('family_members')
+          .insert({
+            family_id: newFamily.id,
+            name: user.full_name || user.email || 'Family Admin',
+            role: 'parent',
+            avatar_url: null
+          });
+
+        if (memberError) {
+          console.error('Error creating family member:', memberError);
+          // Don't throw here, as the main family creation succeeded
+        }
+
         const result = [{
           family: newFamily,
           role: user.role
@@ -175,6 +190,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(invite);
     } catch (error: any) {
       console.error("Error creating invite:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get invite by token (for validation)
+  app.get("/api/invites/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      const { supabaseAdmin } = await import("./supabase");
+
+      // Get the invite with family information
+      const { data: invite, error: inviteError } = await supabaseAdmin
+        .from('family_invites')
+        .select(`
+          *,
+          family:families(*)
+        `)
+        .eq('token', token)
+        .eq('accepted', false)
+        .gte('expires_at', new Date().toISOString())
+        .single();
+
+      if (inviteError || !invite) {
+        return res.status(404).json({ 
+          error: "Invalid or expired invite",
+          details: inviteError?.message 
+        });
+      }
+
+      res.json({
+        invite: invite,
+        family: invite.family
+      });
+    } catch (error: any) {
+      console.error("Error validating invite:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Accept invite
+  app.post("/api/invites/:token/accept", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { token } = req.params;
+      const { email } = req.body;
+      const userId = req.userId!;
+
+      if (!token) {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      const { supabaseAdmin } = await import("./supabase");
+
+      // Get the invite
+      const { data: invite, error: inviteError } = await supabaseAdmin
+        .from('family_invites')
+        .select('*')
+        .eq('token', token)
+        .eq('accepted', false)
+        .gte('expires_at', new Date().toISOString())
+        .single();
+
+      if (inviteError || !invite) {
+        return res.status(404).json({ error: "Invalid or expired invite" });
+      }
+
+      // Verify email matches
+      if (email && invite.email !== email) {
+        return res.status(403).json({ error: "Email mismatch" });
+      }
+
+      // Get user info for family member creation
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+      
+      if (!authUser?.user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update user's family
+      const { error: updateUserError } = await supabaseAdmin
+        .from('users')
+        .update({ family_id: invite.family_id })
+        .eq('id', userId);
+
+      if (updateUserError) {
+        console.error('Error updating user family:', updateUserError);
+        throw updateUserError;
+      }
+
+      // Create family member record for the new user
+      const { error: memberError } = await supabaseAdmin
+        .from('family_members')
+        .insert({
+          family_id: invite.family_id,
+          name: authUser.user.user_metadata?.full_name || authUser.user.email || 'New Member',
+          role: 'parent', // Default role for invited users
+          avatar_url: authUser.user.user_metadata?.avatar_url || null
+        });
+
+      if (memberError) {
+        console.error('Error creating family member:', memberError);
+        // Don't throw here, as the main invitation acceptance succeeded
+      }
+
+      // Mark invite as accepted
+      const { error: acceptError } = await supabaseAdmin
+        .from('family_invites')
+        .update({ 
+          accepted: true, 
+          accepted_at: new Date().toISOString() 
+        })
+        .eq('token', token);
+
+      if (acceptError) {
+        console.error('Error accepting invite:', acceptError);
+        throw acceptError;
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error accepting invite:", error);
       res.status(500).json({ error: error.message });
     }
   });
