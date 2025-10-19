@@ -32,7 +32,7 @@
 
   --sidebar-border: 220 13% 91%;
 
-  --sidebar-primary: 195 75% 45%;
+  --sidebar-primary: 219 70% 59%; /* Warm blue #3B82F6 */
 
   --sidebar-primary-foreground: 0 0% 100%;
 
@@ -40,7 +40,7 @@
 
   --sidebar-accent-foreground: 222 47% 11%;
 
-  --sidebar-ring: 195 75% 45%;
+  --sidebar-ring: 219 70% 59%;
 
   --popover: 0 0% 100%;
 
@@ -48,7 +48,7 @@
 
   --popover-border: 220 13% 91%;
 
-  --primary: 195 75% 45%;
+  --primary: 219 70% 59%; /* Warm blue #3B82F6 */
 
   --primary-foreground: 0 0% 100%;
 
@@ -60,21 +60,21 @@
 
   --muted-foreground: 215 16% 47%;
 
-  --accent: 15 86% 95%;
+  --accent: 158 64% 52%; /* Soft green #10B981 */
 
-  --accent-foreground: 15 85% 35%;
+  --accent-foreground: 0 0% 100%;
 
   --destructive: 0 84% 60%;
 
   --destructive-foreground: 0 0% 100%;
 
   --input: 220 13% 91%;
-  --ring: 195 75% 45%;
-  --chart-1: 195 75% 38%;
-  --chart-2: 15 85% 48%;
-  --chart-3: 142 70% 40%;
-  --chart-4: 270 65% 50%;
-  --chart-5: 30 75% 48%;
+  --ring: 219 70% 59%;
+  --chart-1: 219 70% 59%; /* Warm blue */
+  --chart-2: 158 64% 52%; /* Soft green */
+  --chart-3: 35 92% 56%;  /* Friendly orange */
+  --chart-4: 220 15% 55%; /* Warm gray */
+  --chart-5: 270 65% 50%; /* Purple accent */
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: Georgia, serif;

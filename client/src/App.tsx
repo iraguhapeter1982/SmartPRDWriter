@@ -19,11 +19,13 @@ import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import AcceptInvitePage from "@/pages/AcceptInvitePage";
 import AuthCallback from "@/pages/AuthCallback";
+import LandingPage from "@/pages/LandingPage";
 import NotFound from "@/pages/not-found";
 
-function AuthRouter() {
+function PublicRouter() {
   return (
     <Switch>
+      <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/accept-invite/:token" component={AcceptInvitePage} />
@@ -33,7 +35,7 @@ function AuthRouter() {
   );
 }
 
-function AppRouter() {
+function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -49,14 +51,6 @@ function AppRouter() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  const authPaths = ["/login", "/signup", "/accept-invite", "/auth/callback"];
-  const isAuthPage = authPaths.some(path => location.startsWith(path));
-
-  if (isAuthPage) {
-    return <AuthRouter />;
-  }
 
   if (loading) {
     return (
@@ -69,14 +63,9 @@ function AppLayout() {
     );
   }
 
+  // Show public router (including landing page) for unauthenticated users
   if (!user) {
-    // Redirect to /login if not already on an auth page
-    setTimeout(() => {
-      if (!authPaths.some(path => location.startsWith(path))) {
-        setLocation("/login");
-      }
-    }, 0);
-    return null;
+    return <PublicRouter />;
   }
 
   const style = {
@@ -98,7 +87,7 @@ function AppLayout() {
           </header>
           <main className="flex-1 overflow-auto p-6">
             <div className="max-w-7xl mx-auto">
-              <AppRouter />
+              <AuthenticatedRouter />
             </div>
           </main>
         </div>
