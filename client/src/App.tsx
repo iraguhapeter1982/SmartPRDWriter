@@ -51,6 +51,7 @@ function AuthenticatedRouter() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
+  const [location] = useLocation();
 
   if (loading) {
     return (
@@ -63,8 +64,12 @@ function AppLayout() {
     );
   }
 
-  // Show public router (including landing page) for unauthenticated users
-  if (!user) {
+  // Auth pages that should always be accessible
+  const authPaths = ["/login", "/signup", "/accept-invite", "/auth/callback"];
+  const isAuthPage = authPaths.some(path => location.startsWith(path));
+  
+  // Show public router for unauthenticated users OR if on auth pages
+  if (!user || isAuthPage) {
     return <PublicRouter />;
   }
 
