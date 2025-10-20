@@ -5,6 +5,36 @@ import { requireAuth, type AuthRequest } from "./middleware/auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
+  // Check if user exists by email (for onboarding)
+  app.post("/api/auth/check-user-exists", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const { supabaseAdmin } = await import("./supabase");
+      
+      // Check if user exists in our users table using service role
+      const { data: existingUser, error } = await supabaseAdmin
+        .from('users')
+        .select('id, email')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking user existence:', error);
+        return res.status(500).json({ error: "Failed to check user existence" });
+      }
+
+      res.json({ exists: !!existingUser, user: existingUser });
+    } catch (error: any) {
+      console.error('Error in check-user-exists:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
 
   // Get user's families
   app.get("/api/families", requireAuth, async (req: AuthRequest, res) => {

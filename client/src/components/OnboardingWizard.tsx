@@ -45,6 +45,7 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
 
   // Email verification state
   const [verificationSent, setVerificationSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Progress calculation
@@ -59,6 +60,49 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  // Check email verification status when on step 2
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (currentStep === 2 && verificationSent) {
+      const checkVerificationStatus = async () => {
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (session && session.user) {
+            // Check if user is verified and matches our email
+            if (session.user.email === onboardingData.email && session.user.email_confirmed_at) {
+              setEmailVerified(true);
+              
+              toast({
+                title: "Email Verified!",
+                description: "Great! Your email has been confirmed. You can now continue.",
+                duration: 3000
+              });
+              
+              // Auto-advance to next step after a brief delay
+              setTimeout(() => {
+                setCurrentStep(3);
+              }, 1500);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking verification status:', error);
+        }
+      };
+
+      // Check immediately and then every 3 seconds
+      checkVerificationStatus();
+      intervalId = setInterval(checkVerificationStatus, 3000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [currentStep, verificationSent, onboardingData.email, toast]);
+
   const updateOnboardingData = (updates: Partial<OnboardingData>) => {
     setOnboardingData(prev => ({ ...prev, ...updates }));
   };
@@ -71,8 +115,8 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
         isValid = !!onboardingData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email);
         break;
       case 2:
-        // Email verification step - user needs to check email
-        isValid = verificationSent;
+        // Email verification step - user needs to click email link and be authenticated
+        isValid = emailVerified; // Only valid if user has actually verified their email
         break;
       case 3:
         isValid = !!onboardingData.fullName && 
@@ -86,15 +130,6 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
       default:
         isValid = false;
     }
-    
-    console.log(`Step ${step} validation:`, {
-      isValid,
-      email: onboardingData.email,
-      fullName: onboardingData.fullName,
-      password: onboardingData.password ? '*'.repeat(onboardingData.password.length) : '',
-      familyName: onboardingData.familyName,
-      verificationSent
-    });
     
     return isValid;
   };
@@ -116,10 +151,41 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
   const handleEmailSubmit = async () => {
     setIsLoading(true);
     try {
-      // Note: We rely on Supabase to handle duplicate email detection during signup
-      // since admin.listUsers() requires admin privileges that client doesn't have
+      // Check if user exists using server endpoint with service role
+      const response = await fetch('/api/auth/check-user-exists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: onboardingData.email })
+      });
 
-      // Create Supabase user with email/password - this triggers verification email
+      if (!response.ok) {
+        throw new Error('Failed to check user existence');
+      }
+
+      const { exists, user } = await response.json();
+
+      if (exists) {
+        // User already exists in the database
+        toast({
+          title: "Account Already Exists",
+          description: "This email is already registered. Please sign in instead.",
+          variant: "destructive",
+          action: (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/login')}
+            >
+              Sign In
+            </Button>
+          )
+        });
+        return;
+      }
+
+      // User doesn't exist, proceed with signup
       const { data, error } = await supabase.auth.signUp({
         email: onboardingData.email,
         password: 'temporary-password-will-be-reset', // Temporary password
@@ -132,9 +198,25 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
       });
 
       if (error) {
-        // Handle Supabase specific errors
-        if (error.message.includes('already registered') || error.message.includes('already exists')) {
-          throw new Error('An account with this email already exists. Please sign in instead.');
+        // Handle auth signup errors (including duplicates as fallback)
+        if (error.message.includes('already registered') || 
+            error.message.includes('already exists') || 
+            error.message.includes('User already registered')) {
+          toast({
+            title: "Account Already Exists",
+            description: "This email is already registered. Please sign in instead.",
+            variant: "destructive",
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation('/login')}
+              >
+                Sign In
+              </Button>
+            )
+          });
+          return;
         }
         throw error;
       }
@@ -153,29 +235,13 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
         title: "Check your email",
         description: `We've sent a verification link to ${onboardingData.email}`
       });
+
     } catch (error: any) {
-      if (error.message.includes('already exists') || error.message.includes('already registered')) {
-        toast({
-          title: "Email Already Exists",
-          description: "An account with this email already exists.",
-          variant: "destructive",
-          action: (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation('/login')}
-            >
-              Sign In Instead
-            </Button>
-          )
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive"
-        });
-      }
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
