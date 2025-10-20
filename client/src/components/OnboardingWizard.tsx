@@ -64,19 +64,39 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
   };
 
   const validateStep = (step: number): boolean => {
+    let isValid = false;
+    
     switch (step) {
       case 1:
-        return !!onboardingData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email);
+        isValid = !!onboardingData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email);
+        break;
       case 2:
         // Email verification step - user needs to check email
-        return verificationSent;
+        isValid = verificationSent;
+        break;
       case 3:
-        return !!onboardingData.fullName && !!onboardingData.password && onboardingData.password.length >= 6;
+        isValid = !!onboardingData.fullName && 
+               onboardingData.fullName.trim().length >= 2 && 
+               !!onboardingData.password && 
+               onboardingData.password.length >= 6;
+        break;
       case 4:
-        return !!onboardingData.familyName;
+        isValid = !!onboardingData.familyName && onboardingData.familyName.trim().length >= 2;
+        break;
       default:
-        return false;
+        isValid = false;
     }
+    
+    console.log(`Step ${step} validation:`, {
+      isValid,
+      email: onboardingData.email,
+      fullName: onboardingData.fullName,
+      password: onboardingData.password ? '*'.repeat(onboardingData.password.length) : '',
+      familyName: onboardingData.familyName,
+      verificationSent
+    });
+    
+    return isValid;
   };
 
   const handleNextStep = async () => {
@@ -96,6 +116,9 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
   const handleEmailSubmit = async () => {
     setIsLoading(true);
     try {
+      // Note: We rely on Supabase to handle duplicate email detection during signup
+      // since admin.listUsers() requires admin privileges that client doesn't have
+
       // Create Supabase user with email/password - this triggers verification email
       const { data, error } = await supabase.auth.signUp({
         email: onboardingData.email,
@@ -108,7 +131,13 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Handle Supabase specific errors
+        if (error.message.includes('already registered') || error.message.includes('already exists')) {
+          throw new Error('An account with this email already exists. Please sign in instead.');
+        }
+        throw error;
+      }
 
       // Store onboarding data for later completion
       const tempOnboardingData = {
@@ -125,11 +154,28 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
         description: `We've sent a verification link to ${onboardingData.email}`
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      if (error.message.includes('already exists') || error.message.includes('already registered')) {
+        toast({
+          title: "Email Already Exists",
+          description: "An account with this email already exists.",
+          variant: "destructive",
+          action: (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/login')}
+            >
+              Sign In Instead
+            </Button>
+          )
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -271,7 +317,24 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             autoFocus
             value={onboardingData.email}
             onChange={(e) => updateOnboardingData({ email: e.target.value })}
+            className={
+              onboardingData.email 
+                ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email) ? 'border-green-500' : 'border-red-500')
+                : ''
+            }
           />
+          {onboardingData.email && (
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email) ? (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Valid email address
+              </p>
+            ) : (
+              <p className="text-xs text-red-500">
+                Please enter a valid email address
+              </p>
+            )
+          )}
         </div>
       </div>
     </div>
@@ -325,7 +388,13 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             placeholder="Your full name"
             value={onboardingData.fullName}
             onChange={(e) => updateOnboardingData({ fullName: e.target.value })}
+            className={onboardingData.fullName && onboardingData.fullName.trim().length < 2 ? 'border-red-500' : ''}
           />
+          {onboardingData.fullName && onboardingData.fullName.trim().length < 2 && (
+            <p className="text-xs text-red-500">
+              Full name must be at least 2 characters long
+            </p>
+          )}
         </div>
         
         <div className="space-y-2">
@@ -336,9 +405,11 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             placeholder="Create a secure password"
             value={onboardingData.password}
             onChange={(e) => updateOnboardingData({ password: e.target.value })}
+            className={onboardingData.password && onboardingData.password.length < 6 ? 'border-red-500' : ''}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className={`text-xs ${onboardingData.password && onboardingData.password.length < 6 ? 'text-red-500' : 'text-muted-foreground'}`}>
             Must be at least 6 characters long
+            {onboardingData.password && ` (${onboardingData.password.length}/6)`}
           </p>
         </div>
         
@@ -407,7 +478,13 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
               placeholder="Enter your family name"
               value={onboardingData.familyName}
               onChange={(e) => updateOnboardingData({ familyName: e.target.value })}
+              className={onboardingData.familyName && onboardingData.familyName.trim().length < 2 ? 'border-red-500' : ''}
             />
+            {onboardingData.familyName && onboardingData.familyName.trim().length < 2 && (
+              <p className="text-xs text-red-500">
+                Family name must be at least 2 characters long
+              </p>
+            )}
           </div>
           
           <div className="space-y-3">
@@ -512,7 +589,7 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
                 Already have an account?{' '}
-                <Button variant="secondary" className="p-0 h-auto underline text-primary" onClick={() => setLocation('/login')}>
+                <Button variant="ghost" className="p-0 h-auto underline text-primary" onClick={() => setLocation('/login')}>
                   Sign in
                 </Button>
               </p>
