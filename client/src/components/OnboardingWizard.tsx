@@ -458,7 +458,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
                 Already have an account?{' '}
-                <Button variant="link" className="p-0 h-auto" onClick={() => setLocation('/login')}>
+                <Button variant="ghost" className="p-0 h-auto underline text-primary" onClick={() => setLocation('/login')}>
                   Sign in
                 </Button>
               </p>

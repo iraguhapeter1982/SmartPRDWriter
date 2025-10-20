@@ -105,8 +105,8 @@ export default function SignupPage() {
           <CardDescription>Get started with family management</CardDescription>
           <div className="text-center mt-3">
             <Button 
-              variant="link" 
-              className="text-primary p-0 h-auto text-sm"
+              variant="ghost" 
+              className="text-primary p-0 h-auto text-sm underline"
               onClick={() => setLocation('/onboarding')}
             >
               Try our new guided setup instead →
