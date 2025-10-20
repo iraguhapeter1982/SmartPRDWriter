@@ -19,7 +19,7 @@ export default function LandingPage() {
   const [, setLocation] = useLocation();
 
   const handleGetStarted = () => {
-    setLocation("/signup");
+    setLocation("/onboarding");
   };
 
   const handleSignIn = () => {

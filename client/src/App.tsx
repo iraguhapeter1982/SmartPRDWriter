@@ -17,6 +17,7 @@ import SchoolHubPage from "@/pages/SchoolHubPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
+import OnboardingPage from "@/pages/OnboardingPage";
 import AcceptInvitePage from "@/pages/AcceptInvitePage";
 import AuthCallback from "@/pages/AuthCallback";
 import LandingPage from "@/pages/LandingPage";
@@ -28,6 +29,7 @@ function PublicRouter() {
       <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
+      <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/accept-invite/:token" component={AcceptInvitePage} />
       <Route path="/auth/callback" component={AuthCallback} />
       <Route component={NotFound} />
@@ -65,7 +67,7 @@ function AppLayout() {
   }
 
   // Auth pages that should always be accessible
-  const authPaths = ["/login", "/signup", "/accept-invite", "/auth/callback"];
+  const authPaths = ["/login", "/signup", "/onboarding", "/accept-invite", "/auth/callback"];
   const isAuthPage = authPaths.some(path => location.startsWith(path));
   
   // Show public router for unauthenticated users OR if on auth pages

@@ -103,6 +103,15 @@ export default function SignupPage() {
         <CardHeader>
           <CardTitle>Create Your Family Account</CardTitle>
           <CardDescription>Get started with family management</CardDescription>
+          <div className="text-center mt-3">
+            <Button 
+              variant="link" 
+              className="text-primary p-0 h-auto text-sm"
+              onClick={() => setLocation('/onboarding')}
+            >
+              Try our new guided setup instead →
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
