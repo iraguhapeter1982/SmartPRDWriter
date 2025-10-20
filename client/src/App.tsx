@@ -18,6 +18,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import OnboardingPage from "@/pages/OnboardingPage";
+import OnboardingContinuePage from "@/pages/OnboardingContinuePage";
 import AcceptInvitePage from "@/pages/AcceptInvitePage";
 import AuthCallback from "@/pages/AuthCallback";
 import LandingPage from "@/pages/LandingPage";
@@ -30,6 +31,7 @@ function PublicRouter() {
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/onboarding" component={OnboardingPage} />
+      <Route path="/onboarding/continue" component={OnboardingContinuePage} />
       <Route path="/accept-invite/:token" component={AcceptInvitePage} />
       <Route path="/auth/callback" component={AuthCallback} />
       <Route component={NotFound} />

@@ -178,6 +178,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Complete onboarding - create family and setup user
+  app.post("/api/auth/complete-onboarding", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { familyName, familyMembers, isNewFamily } = req.body;
+
+      if (!familyName) {
+        return res.status(400).json({ error: "Family name is required" });
+      }
+
+      const { supabaseAdmin } = await import("./supabase");
+
+      // Start a transaction-like operation
+      try {
+        // 1. Create the family
+        const { data: family, error: familyError } = await supabaseAdmin
+          .from('families')
+          .insert([{
+            name: familyName,
+            created_by: userId
+          }])
+          .select()
+          .single();
+
+        if (familyError) throw familyError;
+
+        // 2. Update user with family_id and role
+        const { error: userUpdateError } = await supabaseAdmin
+          .from('users')
+          .update({ 
+            family_id: family.id,
+            role: 'parent'
+          })
+          .eq('id', userId);
+
+        if (userUpdateError) throw userUpdateError;
+
+        // 3. Create family members if provided
+        if (familyMembers && familyMembers.length > 0) {
+          const membersToInsert = familyMembers.map((member: any) => ({
+            family_id: family.id,
+            name: member.name,
+            role: member.role,
+            email: member.email || null,
+            added_by: userId
+          }));
+
+          const { error: membersError } = await supabaseAdmin
+            .from('family_members')
+            .insert(membersToInsert);
+
+          if (membersError) throw membersError;
+        }
+
+        res.json({ 
+          success: true, 
+          family,
+          message: "Onboarding completed successfully" 
+        });
+
+      } catch (transactionError) {
+        // If any step fails, we should ideally rollback
+        // For now, just throw the error
+        throw transactionError;
+      }
+
+    } catch (error: any) {
+      console.error("Error completing onboarding:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Create family invite
   app.post("/api/invites", requireAuth, async (req: AuthRequest, res) => {
     try {

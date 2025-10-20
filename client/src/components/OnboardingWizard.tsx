@@ -26,10 +26,11 @@ interface OnboardingData {
 
 interface OnboardingWizardProps {
   onComplete?: () => void;
+  initialStep?: number;
 }
 
-export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
-  const [currentStep, setCurrentStep] = useState(1);
+export default function OnboardingWizard({ onComplete, initialStep = 1 }: OnboardingWizardProps) {
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [isLoading, setIsLoading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -67,6 +68,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       case 1:
         return !!onboardingData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(onboardingData.email);
       case 2:
+        // Email verification step - user needs to check email
         return verificationSent;
       case 3:
         return !!onboardingData.fullName && !!onboardingData.password && onboardingData.password.length >= 6;
@@ -94,7 +96,27 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const handleEmailSubmit = async () => {
     setIsLoading(true);
     try {
-      // Store email and move to verification step
+      // Create Supabase user with email/password - this triggers verification email
+      const { data, error } = await supabase.auth.signUp({
+        email: onboardingData.email,
+        password: 'temporary-password-will-be-reset', // Temporary password
+        options: {
+          emailRedirectTo: `${window.location.origin}/onboarding/continue?step=profile-setup`,
+          data: {
+            onboarding_step: 'email_verified'
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      // Store onboarding data for later completion
+      const tempOnboardingData = {
+        email: onboardingData.email,
+        userId: data.user?.id
+      };
+      localStorage.setItem('onboardingData', JSON.stringify(tempOnboardingData));
+
       setVerificationSent(true);
       setCurrentStep(2);
       
@@ -118,7 +140,17 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     
     setIsLoading(true);
     try {
-      // Simulate resend logic - in production this would resend the email
+      // Resend verification email through Supabase
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: onboardingData.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/onboarding/continue?step=profile-setup`
+        }
+      });
+
+      if (error) throw error;
+
       setResendCooldown(60);
       
       toast({
@@ -139,32 +171,54 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const handleComplete = async () => {
     setIsLoading(true);
     try {
-      // Create account with Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email: onboardingData.email,
+      // Get current user session (should exist after email verification)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('Please verify your email first');
+      }
+
+      // Update user profile with real data
+      const { error: updateError } = await supabase.auth.updateUser({
         password: onboardingData.password,
-        options: {
-          data: {
-            full_name: onboardingData.fullName,
-            family_name: onboardingData.familyName,
-          },
-        },
+        data: {
+          full_name: onboardingData.fullName,
+          family_name: onboardingData.familyName,
+          onboarding_completed: true
+        }
       });
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      // Store family creation data for post-signup processing
+      // Store family creation data for server-side processing
       const familyData = {
         familyName: onboardingData.familyName,
         familyMembers: onboardingData.familyMembers,
-        isNewFamily: true
+        isNewFamily: true,
+        userId: session.user.id
       };
       
-      localStorage.setItem('pendingSignup', JSON.stringify(familyData));
+      // Send to server to create family and members
+      const response = await fetch('/api/auth/complete-onboarding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(familyData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to complete setup');
+      }
+
+      // Clean up temporary data
+      localStorage.removeItem('onboardingData');
 
       toast({
         title: "Success!",
-        description: "Your family hub is being created. You'll be redirected shortly."
+        description: "Your family hub has been created successfully!"
       });
 
       // Redirect will happen automatically via auth state change
@@ -458,7 +512,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
                 Already have an account?{' '}
-                <Button variant="ghost" className="p-0 h-auto underline text-primary" onClick={() => setLocation('/login')}>
+                <Button variant="secondary" className="p-0 h-auto underline text-primary" onClick={() => setLocation('/login')}>
                   Sign in
                 </Button>
               </p>
