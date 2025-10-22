@@ -60,6 +60,31 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  // Pre-fill data when starting from step 3 (coming from email verification)
+  useEffect(() => {
+    const prefillDataFromAuth = async () => {
+      if (initialStep === 3 && !onboardingData.email && !onboardingData.fullName) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const storedData = localStorage.getItem('onboardingData');
+            const parsedData = storedData ? JSON.parse(storedData) : {};
+            
+            updateOnboardingData({
+              email: session.user.email || '',
+              fullName: session.user.user_metadata?.full_name || parsedData.fullName || '',
+              password: 'change-this-password-123' // Pre-fill with placeholder that meets requirements
+            });
+          }
+        } catch (error) {
+          console.error('Error pre-filling auth data:', error);
+        }
+      }
+    };
+
+    prefillDataFromAuth();
+  }, [initialStep, onboardingData.email, onboardingData.fullName]);
+
   // Check email verification status when on step 2
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -453,7 +478,27 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             id="fullName"
             placeholder="Your full name"
             value={onboardingData.fullName}
-            onChange={(e) => updateOnboardingData({ fullName: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Prevent single character entries by requiring at least 2 chars or empty
+              if (value.length === 0 || value.trim().length >= 2) {
+                updateOnboardingData({ fullName: value });
+              }
+            }}
+            onKeyDown={(e) => {
+              // Allow backspace, delete, and arrow keys
+              if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                return;
+              }
+              // If current value is 1 char and trying to delete it, allow
+              if (onboardingData.fullName.length === 1 && e.key === 'Backspace') {
+                return;
+              }
+              // If empty or has 1+ chars, allow new input
+              if (onboardingData.fullName.length === 0 || onboardingData.fullName.length >= 1) {
+                return;
+              }
+            }}
             className={onboardingData.fullName && onboardingData.fullName.trim().length < 2 ? 'border-red-500' : ''}
           />
           {onboardingData.fullName && onboardingData.fullName.trim().length < 2 && (
@@ -470,7 +515,22 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             type="password"
             placeholder="Create a secure password"
             value={onboardingData.password}
-            onChange={(e) => updateOnboardingData({ password: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Prevent single character passwords by requiring at least 6 chars or empty
+              if (value.length === 0 || value.length >= 6) {
+                updateOnboardingData({ password: value });
+              } else if (value.length > onboardingData.password.length) {
+                // Allow building up to 6 characters
+                updateOnboardingData({ password: value });
+              }
+            }}
+            onKeyDown={(e) => {
+              // Allow control keys
+              if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                return;
+              }
+            }}
             className={onboardingData.password && onboardingData.password.length < 6 ? 'border-red-500' : ''}
           />
           <p className={`text-xs ${onboardingData.password && onboardingData.password.length < 6 ? 'text-red-500' : 'text-muted-foreground'}`}>
@@ -543,7 +603,27 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
               id="familyName"
               placeholder="Enter your family name"
               value={onboardingData.familyName}
-              onChange={(e) => updateOnboardingData({ familyName: e.target.value })}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Prevent single character entries by requiring at least 2 chars or empty
+                if (value.length === 0 || value.trim().length >= 2) {
+                  updateOnboardingData({ familyName: value });
+                }
+              }}
+              onKeyDown={(e) => {
+                // Allow backspace, delete, and arrow keys
+                if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                  return;
+                }
+                // If current value is 1 char and trying to delete it, allow
+                if (onboardingData.familyName.length === 1 && e.key === 'Backspace') {
+                  return;
+                }
+                // If empty or has 1+ chars, allow new input
+                if (onboardingData.familyName.length === 0 || onboardingData.familyName.length >= 1) {
+                  return;
+                }
+              }}
               className={onboardingData.familyName && onboardingData.familyName.trim().length < 2 ? 'border-red-500' : ''}
             />
             {onboardingData.familyName && onboardingData.familyName.trim().length < 2 && (
