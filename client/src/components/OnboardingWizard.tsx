@@ -479,25 +479,8 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             placeholder="Your full name"
             value={onboardingData.fullName}
             onChange={(e) => {
-              const value = e.target.value;
-              // Prevent single character entries by requiring at least 2 chars or empty
-              if (value.length === 0 || value.trim().length >= 2) {
-                updateOnboardingData({ fullName: value });
-              }
-            }}
-            onKeyDown={(e) => {
-              // Allow backspace, delete, and arrow keys
-              if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                return;
-              }
-              // If current value is 1 char and trying to delete it, allow
-              if (onboardingData.fullName.length === 1 && e.key === 'Backspace') {
-                return;
-              }
-              // If empty or has 1+ chars, allow new input
-              if (onboardingData.fullName.length === 0 || onboardingData.fullName.length >= 1) {
-                return;
-              }
+              // Always allow the change - validation happens at form submission
+              updateOnboardingData({ fullName: e.target.value });
             }}
             className={onboardingData.fullName && onboardingData.fullName.trim().length < 2 ? 'border-red-500' : ''}
           />
@@ -516,20 +499,8 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             placeholder="Create a secure password"
             value={onboardingData.password}
             onChange={(e) => {
-              const value = e.target.value;
-              // Prevent single character passwords by requiring at least 6 chars or empty
-              if (value.length === 0 || value.length >= 6) {
-                updateOnboardingData({ password: value });
-              } else if (value.length > onboardingData.password.length) {
-                // Allow building up to 6 characters
-                updateOnboardingData({ password: value });
-              }
-            }}
-            onKeyDown={(e) => {
-              // Allow control keys
-              if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                return;
-              }
+              // Always allow the change - validation happens at form submission
+              updateOnboardingData({ password: e.target.value });
             }}
             className={onboardingData.password && onboardingData.password.length < 6 ? 'border-red-500' : ''}
           />
@@ -604,25 +575,8 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
               placeholder="Enter your family name"
               value={onboardingData.familyName}
               onChange={(e) => {
-                const value = e.target.value;
-                // Prevent single character entries by requiring at least 2 chars or empty
-                if (value.length === 0 || value.trim().length >= 2) {
-                  updateOnboardingData({ familyName: value });
-                }
-              }}
-              onKeyDown={(e) => {
-                // Allow backspace, delete, and arrow keys
-                if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                  return;
-                }
-                // If current value is 1 char and trying to delete it, allow
-                if (onboardingData.familyName.length === 1 && e.key === 'Backspace') {
-                  return;
-                }
-                // If empty or has 1+ chars, allow new input
-                if (onboardingData.familyName.length === 0 || onboardingData.familyName.length >= 1) {
-                  return;
-                }
+                // Always allow the change - validation happens at form submission
+                updateOnboardingData({ familyName: e.target.value });
               }}
               className={onboardingData.familyName && onboardingData.familyName.trim().length < 2 ? 'border-red-500' : ''}
             />
