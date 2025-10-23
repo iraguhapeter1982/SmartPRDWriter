@@ -63,18 +63,20 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
   // Pre-fill data when starting from step 3 (coming from email verification)
   useEffect(() => {
     const prefillDataFromAuth = async () => {
-      if (initialStep === 3 && !onboardingData.email && !onboardingData.fullName) {
+      if (initialStep === 3) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
             const storedData = localStorage.getItem('onboardingData');
             const parsedData = storedData ? JSON.parse(storedData) : {};
             
-            updateOnboardingData({
-              email: session.user.email || '',
-              fullName: session.user.user_metadata?.full_name || parsedData.fullName || '',
-              password: 'change-this-password-123' // Pre-fill with placeholder that meets requirements
-            });
+            // Only prefill if fields are empty
+            setOnboardingData(prev => ({
+              ...prev,
+              email: prev.email || session.user.email || '',
+              fullName: prev.fullName || session.user.user_metadata?.full_name || parsedData.fullName || '',
+              password: prev.password || '' // Empty by default, user will set their own
+            }));
           }
         } catch (error) {
           console.error('Error pre-filling auth data:', error);
@@ -83,7 +85,7 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
     };
 
     prefillDataFromAuth();
-  }, [initialStep, onboardingData.email, onboardingData.fullName]);
+  }, []); // Empty dependency array - only run once on mount
 
   // Check email verification status when on step 2
   useEffect(() => {
@@ -478,10 +480,7 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             id="fullName"
             placeholder="Your full name"
             value={onboardingData.fullName}
-            onChange={(e) => {
-              // Always allow the change - validation happens at form submission
-              updateOnboardingData({ fullName: e.target.value });
-            }}
+            onChange={(e) => updateOnboardingData({ fullName: e.target.value })}
             className={onboardingData.fullName && onboardingData.fullName.trim().length < 2 ? 'border-red-500' : ''}
           />
           {onboardingData.fullName && onboardingData.fullName.trim().length < 2 && (
@@ -498,10 +497,7 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
             type="password"
             placeholder="Create a secure password"
             value={onboardingData.password}
-            onChange={(e) => {
-              // Always allow the change - validation happens at form submission
-              updateOnboardingData({ password: e.target.value });
-            }}
+            onChange={(e) => updateOnboardingData({ password: e.target.value })}
             className={onboardingData.password && onboardingData.password.length < 6 ? 'border-red-500' : ''}
           />
           <p className={`text-xs ${onboardingData.password && onboardingData.password.length < 6 ? 'text-red-500' : 'text-muted-foreground'}`}>
