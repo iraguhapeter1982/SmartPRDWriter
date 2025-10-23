@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -130,9 +130,9 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
     };
   }, [currentStep, verificationSent, onboardingData.email, toast]);
 
-  const updateOnboardingData = (updates: Partial<OnboardingData>) => {
+  const updateOnboardingData = useCallback((updates: Partial<OnboardingData>) => {
     setOnboardingData(prev => ({ ...prev, ...updates }));
-  };
+  }, []);
 
   const validateStep = (step: number): boolean => {
     let isValid = false;
@@ -534,11 +534,11 @@ export default function OnboardingWizard({ onComplete, initialStep = 1 }: Onboar
       });
     };
 
-    const updateFamilyMember = (index: number, updates: Partial<typeof onboardingData.familyMembers[0]>) => {
+    const updateFamilyMember = useCallback((index: number, updates: Partial<typeof onboardingData.familyMembers[0]>) => {
       const updatedMembers = [...onboardingData.familyMembers];
       updatedMembers[index] = { ...updatedMembers[index], ...updates };
       updateOnboardingData({ familyMembers: updatedMembers });
-    };
+    }, [onboardingData.familyMembers, updateOnboardingData]);
 
     const removeFamilyMember = (index: number) => {
       const updatedMembers = onboardingData.familyMembers.filter((_, i) => i !== index);
